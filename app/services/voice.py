@@ -1340,7 +1340,7 @@ _EDGE_SCRIPT_SUBTAG_VOICE = re.compile(r"^([a-z]{2,3}-[A-Z][a-z]{3}-[A-Z]{2})-(\
 
 
 def create_edge_tts_communicate(
-    text: str, voice_name: str, rate_str: str
+    text: str, voice_name: str, rate_str: str, boundary: str = "WordBoundary"
 ) -> edge_tts.Communicate:
     """
     按当前已安装的 edge_tts 版本构造 Communicate 对象。
@@ -1358,7 +1358,7 @@ def create_edge_tts_communicate(
     communicate_signature = inspect.signature(edge_tts.Communicate)
 
     if "boundary" in communicate_signature.parameters:
-        communicate_kwargs["boundary"] = "WordBoundary"
+        communicate_kwargs["boundary"] = boundary
 
     # Pass those voices in the full form that edge-tts sends for every voice.
     script_subtag_voice = _EDGE_SCRIPT_SUBTAG_VOICE.match(voice_name)
@@ -1587,6 +1587,21 @@ def stream_edge_tts_chunks(
         loop.close()
 
 
+# Edge voices for which the service stopped returning audio when word
+# boundaries are requested (seen with vi-VN-HoaiMyNeural: the stream ends with
+# "No audio was received" or hangs, while SentenceBoundary works). Remembered
+# for the process lifetime so later requests skip the failing first attempt.
+_EDGE_SENTENCE_BOUNDARY_VOICES: set[str] = set()
+
+
+def _edge_tts_boundary(voice_name: str, attempt: int) -> str:
+    # Word timing gives the best subtitles, so it is tried first. Any retry
+    # falls back to sentence timing, which every Edge voice still returns.
+    if voice_name in _EDGE_SENTENCE_BOUNDARY_VOICES or attempt > 0:
+        return "SentenceBoundary"
+    return "WordBoundary"
+
+
 def azure_tts_v1(
     text: str, voice_name: str, voice_rate: float, voice_file: str
 ) -> Union[SubMaker, None]:
@@ -1595,14 +1610,19 @@ def azure_tts_v1(
     rate_str = convert_rate_to_percent(voice_rate)
     for i in range(3):
         temp_path = None
+        boundary = _edge_tts_boundary(voice_name, i)
         try:
-            logger.info(f"start, voice name: {voice_name}, try: {i + 1}")
+            logger.info(
+                f"start, voice name: {voice_name}, boundary: {boundary}, try: {i + 1}"
+            )
 
             # 这里同时兼容 edge_tts 7.x 和旧版便携包里可能残留的老依赖：
             # 1. 新版支持 `boundary` + `stream_sync()`
             # 2. 旧版不支持 `boundary`，且通常只暴露异步 `stream()`
             ensure_file_path_exists(voice_file)
-            communicate = create_edge_tts_communicate(text, voice_name, rate_str)
+            communicate = create_edge_tts_communicate(
+                text, voice_name, rate_str, boundary=boundary
+            )
             sub_maker = edge_tts.SubMaker()
             timeout_seconds = get_edge_tts_timeout_seconds()
 
@@ -1640,6 +1660,8 @@ def azure_tts_v1(
             # Failed retries must not replace previously successful narration.
             os.replace(temp_path, voice_file)
             temp_path = None
+            if i > 0 and boundary == "SentenceBoundary":
+                _EDGE_SENTENCE_BOUNDARY_VOICES.add(voice_name)
             logger.info(f"completed, output file: {voice_file}")
             return sub_maker
         except Exception as e:
