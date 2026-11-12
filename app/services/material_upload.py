@@ -76,6 +76,17 @@ class MaterialUploadError(ValueError):
     """The uploaded material does not satisfy the file or media requirements."""
 
 
+class _WebpImageUpload(MaterialUploadError):
+    """A .jpg/.jpeg/.png/.bmp upload whose content is actually WebP."""
+
+
+# Shopee, Lazada, TikTok Shop and most CDNs serve product photos as WebP even
+# when the URL or the "Save image as" name ends in .jpg. The render pipeline
+# cannot read WebP, so such uploads are converted to PNG instead of rejected.
+# Mismatches between the supported formats themselves are still rejected.
+_CONVERTIBLE_IMAGE_FORMATS = frozenset({"WEBP"})
+
+
 class MaterialServiceError(RuntimeError):
     """The server could not stage, validate, or persist an uploaded material."""
 
@@ -146,6 +157,10 @@ def _validate_image(file_path: str, extension: str) -> None:
             with Image.open(file_path) as image:
                 image_format = str(image.format or "").upper()
                 if image_format not in _IMAGE_FORMATS_BY_EXTENSION[extension]:
+                    if image_format in _CONVERTIBLE_IMAGE_FORMATS:
+                        raise _WebpImageUpload(
+                            "uploaded image content does not match its file extension"
+                        )
                     raise MaterialUploadError(
                         "uploaded image content does not match its file extension"
                     )
@@ -293,6 +308,27 @@ def _stage_material_upload(
             pass
 
 
+def _convert_image_to_png(file_path: str) -> str:
+    """Re-encode a staged image as PNG next to it and return the new path."""
+    descriptor, png_path = tempfile.mkstemp(
+        prefix=_INTERNAL_UPLOAD_PREFIX, suffix=".png", dir=os.path.dirname(file_path)
+    )
+    os.close(descriptor)
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(file_path) as image:
+                image.load()
+                mode = "RGBA" if "A" in image.getbands() else "RGB"
+                image.convert(mode).save(png_path, format="PNG")
+    except Exception as exc:
+        _remove_staged_file(png_path)
+        raise MaterialUploadError(
+            "uploaded file must contain a valid JPEG, PNG, or BMP image"
+        ) from exc
+    return png_path
+
+
 def save_material_upload(filename: str, source: BinaryIO) -> str:
     """Validate and atomically persist an uploaded local video or image."""
     safe_name, material_kind, temp_path, total_bytes = _stage_material_upload(
@@ -306,7 +342,16 @@ def save_material_upload(filename: str, source: BinaryIO) -> str:
         if material_kind == "video":
             _validate_video(temp_path)
         else:
-            _validate_image(temp_path, extension)
+            try:
+                _validate_image(temp_path, extension)
+            except _WebpImageUpload:
+                png_path = _convert_image_to_png(temp_path)
+                _remove_staged_file(temp_path)
+                temp_path = png_path
+                extension = ".png"
+                stored_name = f"{Path(stored_name).stem}{extension}"
+                target_path = os.path.join(os.path.dirname(temp_path), stored_name)
+                _validate_image(temp_path, extension)
 
         try:
             os.replace(temp_path, target_path)

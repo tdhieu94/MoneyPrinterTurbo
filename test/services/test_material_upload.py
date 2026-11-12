@@ -200,6 +200,36 @@ class TestMaterialUploadService(unittest.TestCase):
             self.assertTrue(stored_name.endswith(".png"))
             self.assertEqual(len(os.listdir(temp_dir)), 1)
 
+    def test_webp_saved_with_jpg_extension_is_converted_to_png(self):
+        # Shopee and most CDNs serve WebP even when the saved name ends in .jpg.
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(
+                material_upload, "uploaded_material_dir", return_value=temp_dir
+            ):
+                stored_name = material_upload.save_material_upload(
+                    "product.jpg", io.BytesIO(_image_bytes("WEBP"))
+                )
+
+            self.assertTrue(stored_name.endswith(".png"))
+            self.assertEqual(os.listdir(temp_dir), [stored_name])
+            with Image.open(os.path.join(temp_dir, stored_name)) as image:
+                self.assertEqual(image.format, "PNG")
+                self.assertEqual(image.size, (2, 2))
+
+    def test_webp_with_alpha_keeps_transparency(self):
+        output = io.BytesIO()
+        Image.new("RGBA", (2, 2), color=(255, 0, 0, 0)).save(output, format="WEBP")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(
+                material_upload, "uploaded_material_dir", return_value=temp_dir
+            ):
+                stored_name = material_upload.save_material_upload(
+                    "product.png", io.BytesIO(output.getvalue())
+                )
+
+            with Image.open(os.path.join(temp_dir, stored_name)) as image:
+                self.assertEqual(image.mode, "RGBA")
+
     def test_truncated_jpeg_is_rejected_before_publishing(self):
         # Pillow's verify() accepts this missing end marker, but decoding the
         # pixels later raises OSError and would fail an otherwise valid task.
