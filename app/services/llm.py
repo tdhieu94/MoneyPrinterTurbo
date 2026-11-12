@@ -23,6 +23,7 @@ _max_retries = 5
 MIN_SCRIPT_PARAGRAPH_NUMBER = 1
 MAX_SCRIPT_PARAGRAPH_NUMBER = 10
 MAX_SCRIPT_PROMPT_LENGTH = 2000
+GEMINI_REQUEST_TIMEOUT_SECONDS = 90
 MAX_SCRIPT_SYSTEM_PROMPT_LENGTH = 8000
 # “测试模型链接”只发送一条极小请求。OpenAI SDK 默认 600 秒超时并自动重试
 # 2 次，端点不可达（代理、防火墙或 DNS 故障）时，测试按钮会先长时间挂起，
@@ -425,7 +426,16 @@ def _generate_response(
             from google import genai
             from google.genai import types
 
-            http_options = types.HttpOptions(base_url=base_url) if base_url else None
+            # google-genai has no default request timeout, so an overloaded
+            # endpoint that accepts the connection but never answers would
+            # hang script generation, and the WebUI with it, indefinitely.
+            gemini_timeout_seconds = GEMINI_REQUEST_TIMEOUT_SECONDS
+            if request_timeout is not None:
+                gemini_timeout_seconds = min(gemini_timeout_seconds, request_timeout)
+            http_options = types.HttpOptions(
+                base_url=base_url or None,
+                timeout=int(gemini_timeout_seconds * 1000),
+            )
             generation_config = types.GenerateContentConfig(
                 temperature=0.5,
                 top_p=1,

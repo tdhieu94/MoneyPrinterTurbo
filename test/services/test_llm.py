@@ -1220,14 +1220,49 @@ class TestLiteLLMProvider(unittest.TestCase):
             result = llm._generate_response("Say hello")
 
         self.assertEqual(result, "hello\ngemini")
+        self.assertEqual(captured["client_kwargs"]["api_key"], "gemini-test-key")
+        http_options = captured["client_kwargs"]["http_options"]
+        self.assertIsNone(http_options.base_url)
+        # 默认必须带超时：服务过载时请求可能一直挂起，脚本生成会卡死。
         self.assertEqual(
-            captured["client_kwargs"],
-            {"api_key": "gemini-test-key", "http_options": None},
+            http_options.timeout, llm.GEMINI_REQUEST_TIMEOUT_SECONDS * 1000
         )
         self.assertEqual(captured["model"], "gemini-test-model")
         self.assertEqual(captured["contents"], "Say hello")
         self.assertEqual(captured["config"].max_output_tokens, 2048)
         self.assertTrue(captured["closed"])
+
+    def test_gemini_request_timeout_tightens_the_default(self):
+        """连接测试等调用方传入更短的超时时，Gemini 请求应使用更短的值。"""
+        config.app.update(
+            {
+                "llm_provider": "gemini",
+                "gemini_api_key": "gemini-test-key",
+                "gemini_base_url": "",
+                "gemini_model_name": "gemini-test-model",
+            }
+        )
+        captured = {}
+
+        class FakeModels:
+            def generate_content(self, **kwargs):
+                return types.SimpleNamespace(text="ok")
+
+        class FakeClient:
+            def __init__(self, **kwargs):
+                captured["client_kwargs"] = kwargs
+                self.models = FakeModels()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc_value, traceback):
+                return None
+
+        with patch("google.genai.Client", FakeClient):
+            llm._generate_response("Say hello", request_timeout=5)
+
+        self.assertEqual(captured["client_kwargs"]["http_options"].timeout, 5000)
 
     def test_cloudflare_requires_account_id_before_request(self):
         """Cloudflare 缺少 Account ID 时应在本地失败，不发送无效请求。"""
