@@ -45,6 +45,7 @@ from app.models.schema import (
     VideoParams,
     VideoTransitionMode,
 )
+from app.services import affiliate as affiliate_service
 from app.services import bgm as bgm_service
 from app.services import material_upload as material_upload_service
 from app.services import (
@@ -2693,6 +2694,18 @@ def sync_script_order_concat_mode():
         VideoConcatMode.random.value,
     }:
         st.session_state[widget_key] = previous_mode
+
+
+def apply_affiliate_script_template():
+    """Fill the custom script requirements with the selected affiliate template."""
+    template_id = st.session_state.get(
+        localized_widget_key("affiliate_script_template_select")
+    )
+    prompt = affiliate_service.get_affiliate_script_prompt(template_id)
+    if prompt:
+        # Selecting "none" keeps whatever the user typed; only a real template
+        # replaces the field, and the text stays editable afterwards.
+        st.session_state["video_script_prompt"] = prompt
 
 
 def reset_script_system_prompt():
@@ -5922,6 +5935,23 @@ def _render_script_settings(panel, params):
                     )
                     _set_runtime_config(
                         "ui", "paragraph_number", params.paragraph_number
+                    )
+                    affiliate_template_labels = {
+                        "none": tr("Affiliate Template None"),
+                        "quick_review": tr("Affiliate Template Quick Review"),
+                        "top_reasons": tr("Affiliate Template Top Reasons"),
+                        "deal_alert": tr("Affiliate Template Deal Alert"),
+                    }
+                    stable_selectbox(
+                        tr("Affiliate Script Template"),
+                        options=affiliate_service.AFFILIATE_TEMPLATE_IDS,
+                        default_value=affiliate_service.AFFILIATE_TEMPLATE_NONE,
+                        key="affiliate_script_template_select",
+                        format_func=lambda value: affiliate_template_labels.get(
+                            value, value
+                        ),
+                        help=tr("Affiliate Script Template Help"),
+                        on_change=apply_affiliate_script_template,
                     )
                     params.video_script_prompt = st.text_area(
                         tr("Custom Script Requirements"),
