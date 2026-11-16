@@ -347,6 +347,36 @@ def get_kokoro_voices(*, fallback: bool = True) -> list[str]:
     return voices or ([f"kokoro:{KOKORO_DEFAULT_VOICE}"] if fallback else [])
 
 
+VIENEU_VOICES = (
+    "Ngọc Lan-Female",
+    "Mỹ Duyên-Female",
+    "Trúc Ly-Female",
+    "Ngọc Linh-Female",
+    "Gia Bảo-Male",
+    "Thái Sơn-Male",
+    "Đức Trí-Male",
+    "Xuân Vĩnh-Male",
+    "Trọng Hữu-Male",
+    "Bình An-Male",
+)
+_VIENEU_DEFAULT_TIMEOUT_SECONDS = 900
+
+
+def get_vieneu_voices() -> list[str]:
+    """VieNeu TTS 的越南语预置音色；可通过 [vieneu] voices 覆盖。"""
+    configured = config.vieneu.get("voices") if hasattr(config, "vieneu") else None
+    if isinstance(configured, str):
+        configured = configured.split(",")
+    names = []
+    for entry in configured or VIENEU_VOICES:
+        if not isinstance(entry, str):
+            continue
+        name = entry.strip().removeprefix("vieneu:").strip()
+        if name and f"vieneu:{name}" not in names:
+            names.append(f"vieneu:{name}")
+    return names or [f"vieneu:{v}" for v in VIENEU_VOICES]
+
+
 def get_fish_audio_voices() -> list[str]:
     """Return configured Fish Audio voices.
 
@@ -495,6 +525,10 @@ def is_kokoro_voice(voice_name: str) -> bool:
     return (voice_name or "").startswith("kokoro:")
 
 
+def is_vieneu_voice(voice_name: str | None) -> bool:
+    return (voice_name or "").startswith("vieneu:")
+
+
 def is_fish_audio_voice(voice_name: str) -> bool:
     return (voice_name or "").startswith("fish_audio:")
 
@@ -546,6 +580,8 @@ def is_azure_v1_voice(voice_name: str | None) -> bool:
     if is_chatterbox_voice(name):
         return False
     if is_kokoro_voice(name):
+        return False
+    if is_vieneu_voice(name):
         return False
     if is_fish_audio_voice(name):
         return False
@@ -765,6 +801,15 @@ def _single_tts(
         else:
             logger.error(f"Invalid kokoro voice name format: {voice_name}")
             return None
+    elif is_vieneu_voice(voice_name):
+        # 格式: vieneu:<voice>，voice 可带显示用的 -Female/-Male 后缀
+        vieneu_voice = voice_name.split(":", 1)[1].strip()
+        if vieneu_voice.endswith(("-Female", "-Male")):
+            vieneu_voice = vieneu_voice.rsplit("-", 1)[0]
+        if vieneu_voice:
+            return vieneu_tts(text, vieneu_voice, voice_file, voice_rate, voice_volume)
+        logger.error(f"Invalid vieneu voice name format: {voice_name}")
+        return None
     elif is_fish_audio_voice(voice_name):
         parts = voice_name.split(":")
         reference_id = parts[1] if len(parts) >= 2 else "default"
@@ -2933,6 +2978,127 @@ def kokoro_tts(
         model_id = config.kokoro.get("model_id", "kokoro") or "kokoro"
     return _openai_compatible_tts(
         "kokoro", base_url, api_key, model_id, voice, text, voice_rate, voice_file
+    )
+
+
+def _vieneu_python_path() -> str:
+    return str(config.vieneu.get("python_path", "") or "").strip().strip('"')
+
+
+def _vieneu_timeout_seconds() -> float:
+    raw = config.vieneu.get("timeout_seconds", _VIENEU_DEFAULT_TIMEOUT_SECONDS)
+    try:
+        timeout = float(raw)
+    except (TypeError, ValueError):
+        return float(_VIENEU_DEFAULT_TIMEOUT_SECONDS)
+    if not math.isfinite(timeout) or timeout <= 0:
+        return float(_VIENEU_DEFAULT_TIMEOUT_SECONDS)
+    return timeout
+
+
+def vieneu_tts(
+    text: str,
+    voice: str,
+    voice_file: str,
+    voice_rate: float = 1.0,
+    voice_volume: float = 1.0,
+) -> Union[SubMaker, None]:
+    """Generate Vietnamese speech with a local VieNeu TTS install.
+
+    VieNeu (pip package ``vieneu``) runs offline on CPU and needs no API key.
+    It usually lives in its own virtual environment (often a newer Python than
+    this app), so we run ``app/services/vieneu_worker.py`` with that
+    environment's interpreter, configured as ``[vieneu] python_path``.
+
+    The worker writes a WAV which is encoded to the requested MP3 path with
+    FFmpeg (applying ``voice_rate`` via ``atempo``). VieNeu returns no word
+    timestamps, so subtitles are split by sentence across the audio; set
+    ``subtitle_provider = "whisper"`` for tighter sync.
+    """
+    text = (text or "").strip()
+    if not text:
+        logger.error("VieNeu TTS text is empty")
+        return None
+    if not any(character.isalnum() for character in text):
+        logger.error("VieNeu TTS text contains no speakable characters")
+        return None
+
+    python_path = _vieneu_python_path()
+    if not python_path:
+        logger.error(
+            "VieNeu python_path is not set, please configure [vieneu] python_path "
+            "in config.toml (the python.exe of the environment where vieneu is installed)"
+        )
+        return None
+    if not os.path.isfile(python_path):
+        logger.error(f"VieNeu python_path does not exist: {python_path}")
+        return None
+
+    worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vieneu_worker.py")
+    ensure_file_path_exists(voice_file)
+    output_dir = os.path.dirname(os.path.abspath(voice_file)) or "."
+    timeout = _vieneu_timeout_seconds()
+
+    with tempfile.TemporaryDirectory(prefix=".mpt-vieneu-", dir=output_dir) as work_dir:
+        wav_file = os.path.join(work_dir, "vieneu.wav")
+        request = json.dumps(
+            {"text": text, "voice": voice, "output": wav_file}, ensure_ascii=False
+        ).encode("utf-8")
+        env = dict(os.environ)
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
+        logger.info(f"start vieneu tts, voice: {voice}, timeout: {timeout:g}s")
+        started = time.monotonic()
+        try:
+            result = subprocess.run(
+                [python_path, worker],
+                input=request,
+                capture_output=True,
+                check=False,
+                timeout=timeout,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            logger.error(f"VieNeu TTS timed out after {timeout:g} seconds")
+            return None
+        except OSError as exc:
+            logger.error(f"failed to start VieNeu TTS: {exc}")
+            return None
+
+        if result.returncode != 0 or not os.path.exists(wav_file):
+            stderr = (result.stderr or b"").decode("utf-8", errors="replace").strip()
+            logger.error(
+                f"VieNeu TTS failed (exit {result.returncode}): {stderr[-800:]}"
+            )
+            return None
+        logger.info(f"vieneu tts synthesized in {time.monotonic() - started:.1f}s")
+
+        command = [utils.get_ffmpeg_binary(), "-nostdin", "-v", "error", "-y", "-i", wav_file]
+        rate = float(voice_rate or 1.0)
+        if math.isfinite(rate) and abs(rate - 1.0) > 1e-3:
+            command += ["-filter:a", f"atempo={max(0.5, min(2.0, rate)):g}"]
+        command += ["-codec:a", "libmp3lame", "-q:a", "2"]
+        if not _publish_tts_ffmpeg_output(command, voice_file, "vieneu encode"):
+            return None
+
+    try:
+        audio_clip = AudioFileClip(voice_file)
+        try:
+            audio_duration = audio_clip.duration
+        finally:
+            audio_clip.close()
+    except Exception as exc:
+        logger.error(f"VieNeu TTS produced unreadable audio: {exc}")
+        return None
+    if not math.isfinite(audio_duration) or audio_duration <= 0:
+        logger.error("VieNeu TTS produced an invalid audio duration")
+        return None
+
+    logger.success(f"vieneu tts succeeded: {voice_file}")
+    return populate_legacy_submaker_with_full_text(
+        sub_maker=ensure_legacy_submaker_fields(SubMaker()),
+        text=text,
+        audio_duration_seconds=audio_duration,
     )
 
 
