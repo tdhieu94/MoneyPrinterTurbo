@@ -216,6 +216,33 @@ class TestMaterialUploadService(unittest.TestCase):
                 self.assertEqual(image.format, "PNG")
                 self.assertEqual(image.size, (2, 2))
 
+    def test_webp_extension_is_accepted_and_stored_as_png(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(
+                material_upload, "uploaded_material_dir", return_value=temp_dir
+            ):
+                stored_name = material_upload.save_material_upload(
+                    "product.WEBP", io.BytesIO(_image_bytes("WEBP"))
+                )
+
+            self.assertTrue(stored_name.endswith(".png"))
+            self.assertEqual(os.listdir(temp_dir), [stored_name])
+            with Image.open(os.path.join(temp_dir, stored_name)) as image:
+                self.assertEqual(image.format, "PNG")
+
+    def test_webp_extension_with_other_content_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(
+                material_upload, "uploaded_material_dir", return_value=temp_dir
+            ):
+                with self.assertRaisesRegex(
+                    material_upload.MaterialUploadError, "does not match"
+                ):
+                    material_upload.save_material_upload(
+                        "product.webp", io.BytesIO(_image_bytes("PNG"))
+                    )
+            self.assertEqual(os.listdir(temp_dir), [])
+
     def test_webp_with_alpha_keeps_transparency(self):
         output = io.BytesIO()
         Image.new("RGBA", (2, 2), color=(255, 0, 0, 0)).save(output, format="WEBP")
