@@ -512,6 +512,7 @@
     "Configure Providers": "Configura",
     "Active Provider": "En ús: {provider}",
     "No Configured Providers": "Encara no hi ha proveïdors configurats.",
-    "Provider Configuration Changed": "La configuració ha canviat. Revisa aquest proveïdor a la seva configuració."
+    "Provider Configuration Changed": "La configuració ha canviat. Revisa aquest proveïdor a la seva configuració.",
+    "VieNeu Python Path": "VieNeu Python Path (python.exe)"
   }
 }

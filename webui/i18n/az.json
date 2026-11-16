@@ -512,6 +512,7 @@
     "Configure Providers": "Tənzimlə",
     "Active Provider": "İstifadədə: {provider}",
     "No Configured Providers": "Hələ tənzimlənmiş provayder yoxdur.",
-    "Provider Configuration Changed": "Parametrlər dəyişib. Bu provayderin parametrlərini yoxlayın."
+    "Provider Configuration Changed": "Parametrlər dəyişib. Bu provayderin parametrlərini yoxlayın.",
+    "VieNeu Python Path": "VieNeu Python Path (python.exe)"
   }
 }

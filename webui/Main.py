@@ -255,6 +255,7 @@ _RUNTIME_CONFIG_SECTIONS = {
     "azure": config.azure,
     "chatterbox": config.chatterbox,
     "kokoro": config.kokoro,
+    "vieneu": config.vieneu,
     "elevenlabs": config.elevenlabs,
     "minimax_tts": config.minimax_tts,
     "siliconflow": config.siliconflow,
@@ -1519,6 +1520,8 @@ def _infer_tts_server_from_voice(voice_name):
         return "chatterbox"
     if voice.is_kokoro_voice(voice_name):
         return "kokoro"
+    if voice.is_vieneu_voice(voice_name):
+        return "vieneu"
     if voice.is_fish_audio_voice(voice_name):
         return "fish_audio"
     if voice.is_voxcpm_voice(voice_name):
@@ -7087,6 +7090,8 @@ def _get_voice_preview_provider_signature(tts_server: str) -> dict:
             "model_id": config.kokoro.get("model_id", ""),
             "credential": _credential_signature(config.kokoro.get("api_key", "")),
         }
+    if tts_server == "vieneu":
+        return {"python_path": config.vieneu.get("python_path", "")}
     if tts_server == "voxcpm":
         return {
             "base_url": config.voxcpm.get("base_url", ""),
@@ -8008,6 +8013,7 @@ def _render_audio_settings(panel, params):
                 ("elevenlabs", "ElevenLabs TTS"),
                 ("chatterbox", "Chatterbox TTS"),
                 ("kokoro", "Kokoro TTS"),
+                ("vieneu", "VieNeu TTS (Tiếng Việt, offline)"),
                 ("fish_audio", "Fish Audio TTS"),
                 ("voxcpm", "VoxCPM TTS"),
             ]
@@ -8083,6 +8089,8 @@ def _render_audio_settings(panel, params):
                 # 自托管 Kokoro 服务的音色：[kokoro] voices 为空时从服务端 /audio/voices 读取
                 _sync_kokoro_config_from_session_state()
                 filtered_voices = _get_kokoro_voice_options(saved_voice_name)
+            elif selected_tts_server == "vieneu":
+                filtered_voices = voice.get_vieneu_voices()
             elif selected_tts_server == "fish_audio":
                 filtered_voices = voice.get_fish_audio_voices()
             elif selected_tts_server == "voxcpm":
@@ -8108,7 +8116,11 @@ def _render_audio_settings(panel, params):
                 if voice.is_elevenlabs_voice(v):
                     parts = v.split(":", 2)
                     return parts[2] if len(parts) >= 3 else v
-                if voice.is_chatterbox_voice(v) or voice.is_kokoro_voice(v):
+                if (
+                    voice.is_chatterbox_voice(v)
+                    or voice.is_kokoro_voice(v)
+                    or voice.is_vieneu_voice(v)
+                ):
                     name = v.split(":", 1)[1] if ":" in v else v
                     return name.replace("-Female", "").replace("-Male", "")
                 if voice.is_minimax_voice(v):
@@ -8569,6 +8581,23 @@ def _render_audio_settings(panel, params):
                     "kokoro",
                     "voices",
                     _parse_chatterbox_voices(kokoro_voices),
+                )
+
+            # VieNeu: local offline Vietnamese TTS run through its own Python env.
+            if tts_mode_enabled and (
+                selected_tts_server == "vieneu"
+                or (voice_name and voice.is_vieneu_voice(voice_name))
+            ):
+                vieneu_python_path = st.text_input(
+                    tr("VieNeu Python Path"),
+                    value=config.vieneu.get("python_path", ""),
+                    key="vieneu_python_path_input",
+                    placeholder=r"E:\text-to-video\venv\Scripts\python.exe",
+                )
+                _set_runtime_config(
+                    "vieneu",
+                    "python_path",
+                    (vieneu_python_path or "").strip().strip('"'),
                 )
 
             # 三种模式只渲染当前任务真正需要的控件。自动配音可调音量和语速；
