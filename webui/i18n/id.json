@@ -513,6 +513,7 @@
     "Active Provider": "Sedang digunakan: {provider}",
     "No Configured Providers": "Belum ada penyedia yang dikonfigurasi.",
     "Provider Configuration Changed": "Konfigurasi berubah. Periksa pengaturan penyedia ini.",
-    "VieNeu Python Path": "VieNeu Python Path (python.exe)"
+    "VieNeu Python Path": "VieNeu Python Path (python.exe)",
+    "Fit with Blurred Background": "Fit with Blurred Background"
   }
 }

@@ -513,6 +513,7 @@
     "Active Provider": "En cours d’utilisation : {provider}",
     "No Configured Providers": "Aucun fournisseur configuré pour le moment.",
     "Provider Configuration Changed": "La configuration a changé. Vérifiez les paramètres de ce fournisseur.",
-    "VieNeu Python Path": "VieNeu Python Path (python.exe)"
+    "VieNeu Python Path": "VieNeu Python Path (python.exe)",
+    "Fit with Blurred Background": "Fit with Blurred Background"
   }
 }

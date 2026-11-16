@@ -240,6 +240,34 @@ class TestVideoService(unittest.TestCase):
             vd.close_clip(fitted)
             vd.close_clip(source)
 
+    def test_fit_clip_blur_keeps_full_frame_over_blurred_backdrop(self):
+        source_color = [200, 100, 50]
+        source = ImageClip(
+            vd.np.full((90, 160, 3), source_color, dtype=vd.np.uint8)
+        ).with_duration(1)
+        fitted = vd._fit_clip_to_canvas(
+            source,
+            target_width=90,
+            target_height=160,
+            fit_mode=vd.VideoFitMode.blur,
+        )
+
+        try:
+            self.assertEqual(tuple(fitted.size), (90, 160))
+            self.assertIsNone(fitted.mask)
+            frame = fitted.get_frame(0)
+            # Centre: the complete, unblurred source frame.
+            self.assertEqual(frame[80, 45].tolist(), source_color)
+            # Bars: a dimmed copy of the source instead of black.
+            top = frame[2, 45].tolist()
+            self.assertNotEqual(top, [0, 0, 0])
+            for channel, original in zip(top, source_color):
+                self.assertLess(channel, original)
+                self.assertGreater(channel, original * 0.4)
+        finally:
+            vd.close_clip(fitted)
+            vd.close_clip(source)
+
     def test_delete_files_deduplicates_paths_and_ignores_missing_files(self):
         """
         循环片段会让同一路径在拼接列表中重复出现，清理时每个路径只能删除一次。

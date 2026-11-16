@@ -136,7 +136,7 @@
     "Video Fit Mode": "Cách khớp khung hình nguồn",
     "Fill and Crop": "Lấp đầy (cắt giữa)",
     "Fit with Black Bars": "Vừa khung (viền đen)",
-    "Video Fit Mode Help": "Lấp đầy sử dụng toàn bộ khung đầu ra và cắt phần cạnh dư. Vừa khung giữ nguyên toàn bộ hình nguồn và thêm viền đen khi cần.",
+    "Video Fit Mode Help": "Lấp đầy sử dụng toàn bộ khung đầu ra và cắt phần cạnh dư. Vừa khung giữ nguyên toàn bộ hình nguồn và thêm viền đen khi cần. Nền mờ cũng giữ nguyên toàn bộ hình, phần trống được lấp bằng chính ảnh đó làm mờ (hợp với ảnh sản phẩm).",
     "Image Motion": "Chuyển động hình ảnh",
     "Static Image": "Tĩnh",
     "Slow Zoom": "Phóng to chậm",
@@ -513,6 +513,7 @@
     "Active Provider": "Đang sử dụng: {provider}",
     "No Configured Providers": "Chưa có nhà cung cấp nào được cấu hình.",
     "Provider Configuration Changed": "Cấu hình đã thay đổi. Hãy kiểm tra cài đặt của nhà cung cấp này.",
-    "VieNeu Python Path": "Đường dẫn Python của VieNeu (python.exe)"
+    "VieNeu Python Path": "Đường dẫn Python của VieNeu (python.exe)",
+    "Fit with Blurred Background": "Hiện đủ ảnh, nền mờ"
   }
 }

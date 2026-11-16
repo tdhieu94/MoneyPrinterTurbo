@@ -143,7 +143,7 @@
     "Video Fit Mode": "Source Frame Fit",
     "Fill and Crop": "Fill (center crop)",
     "Fit with Black Bars": "Fit (black bars)",
-    "Video Fit Mode Help": "Fill uses the entire output canvas and crops excess edges. Fit preserves the complete source frame and adds black bars when needed.",
+    "Video Fit Mode Help": "Fill uses the entire output canvas and crops excess edges. Fit preserves the complete source frame and adds black bars when needed. Blurred Background also keeps the complete frame, filling the bars with a blurred copy of it (good for product photos).",
     "Image Motion": "Image Motion",
     "Static Image": "Static",
     "Slow Zoom": "Slow Zoom",
@@ -775,6 +775,7 @@
     "No Configured Providers": "No providers configured yet.",
     "Provider Configuration Changed": "Configuration changed. Review this provider in its settings.",
     "VieNeu Python Path": "VieNeu Python Path (python.exe)",
-    "tts_provider_tips.vieneu": "Local, offline Vietnamese TTS, free with no API key: enter the python.exe of the environment where the `vieneu` package is installed. The first run loads the model and can take a few minutes."
+    "tts_provider_tips.vieneu": "Local, offline Vietnamese TTS, free with no API key: enter the python.exe of the environment where the `vieneu` package is installed. The first run loads the model and can take a few minutes.",
+    "Fit with Blurred Background": "Fit with Blurred Background"
   }
 }

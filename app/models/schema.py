@@ -51,6 +51,7 @@ class VideoFitMode(str, Enum):
 
     cover = "cover"
     contain = "contain"
+    blur = "blur"
 
 
 class ImageMotion(str, Enum):

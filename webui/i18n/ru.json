@@ -513,6 +513,7 @@
     "Active Provider": "Используется: {provider}",
     "No Configured Providers": "Пока нет настроенных провайдеров.",
     "Provider Configuration Changed": "Конфигурация изменилась. Проверьте настройки этого провайдера.",
-    "VieNeu Python Path": "VieNeu Python Path (python.exe)"
+    "VieNeu Python Path": "VieNeu Python Path (python.exe)",
+    "Fit with Blurred Background": "Fit with Blurred Background"
   }
 }
