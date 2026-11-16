@@ -773,6 +773,8 @@
     "Configure Providers": "Configure",
     "Active Provider": "In use: {provider}",
     "No Configured Providers": "No providers configured yet.",
-    "Provider Configuration Changed": "Configuration changed. Review this provider in its settings."
+    "Provider Configuration Changed": "Configuration changed. Review this provider in its settings.",
+    "VieNeu Python Path": "VieNeu Python Path (python.exe)",
+    "tts_provider_tips.vieneu": "Local, offline Vietnamese TTS, free with no API key: enter the python.exe of the environment where the `vieneu` package is installed. The first run loads the model and can take a few minutes."
   }
 }

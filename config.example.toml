@@ -780,6 +780,16 @@ model_id = "kokoro"
 # from the server (GET {base_url}/audio/voices).
 voices = []
 
+[vieneu]
+# Local, offline Vietnamese TTS (pip package "vieneu"), no API key needed.
+# Point python_path at the python.exe of the environment where vieneu is
+# installed, e.g. "E:\\Projects\\text-to-video\\venv\\Scripts\\python.exe".
+python_path = ""
+# The first run downloads/loads the model and can take several minutes.
+timeout_seconds = 900
+# Leave empty to use the built-in voice list.
+voices = []
+
 [fish_audio]
 # Fish Audio TTS service: https://fish.audio
 # API key: https://fish.audio/app/developers

@@ -773,6 +773,8 @@
     "Configure Providers": "配置",
     "Active Provider": "正在使用：{provider}",
     "No Configured Providers": "尚未配置服务商。",
-    "Provider Configuration Changed": "配置已更改，请检查该服务商的设置。"
+    "Provider Configuration Changed": "配置已更改，请检查该服务商的设置。",
+    "VieNeu Python Path": "VieNeu Python 路径",
+    "tts_provider_tips.vieneu": "本地离线越南语 TTS，免费且无需 API Key：填写已安装 `vieneu` 包的环境中的 python.exe 路径。首次运行需加载模型，可能需要几分钟。"
   }
 }
