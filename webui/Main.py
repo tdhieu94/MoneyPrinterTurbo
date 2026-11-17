@@ -2226,6 +2226,13 @@ def _render_generation_task_snapshot(task_id, task):
             f"video_files={video_files}, error={exc}"
         )
 
+    post_text = str(task.get("post_text") or "").strip()
+    if post_text:
+        with st.container(border=True, key=f"post_text_{task_id}"):
+            st.write(tr("Post Caption Ready"))
+            st.caption(tr("Post Caption Copy Help"))
+            st.code(post_text, language=None, wrap_lines=True)
+
     _render_generation_logs(task_id)
     if (
         state == const.TASK_STATE_COMPLETE
@@ -6057,6 +6064,97 @@ def _render_script_settings(panel, params):
             )
 
 
+DEFAULT_CTA_TEXT_KEY = "Sales Overlay Default CTA"
+
+
+def _generate_hooks_into_session():
+    """按钮回调：用当前 LLM 生成 5 句开头钩子，每行一句写入输入框。"""
+    subject = str(st.session_state.get("video_subject", "") or "").strip()
+    script = str(st.session_state.get("video_script", "") or "").strip()
+    if not subject and not script:
+        st.session_state["sales_hook_error"] = tr("Hooks Need Subject")
+        return
+    hooks = llm.generate_hooks(subject=subject, script=script, count=5)
+    if hooks:
+        st.session_state["sales_hook_text"] = "\n".join(hooks)
+        st.session_state.pop("sales_hook_error", None)
+    else:
+        st.session_state["sales_hook_error"] = tr("Hooks Generation Failed")
+
+
+def _render_sales_overlay_settings(panel, params):
+    """渲染带货视频的叠加文字：开头钩子、价格标签和结尾行动号召。"""
+    with panel:
+        with st.container(border=True, key="step_card_sales_overlay"):
+            st.write(tr("Sales Overlay Settings"))
+            st.caption(tr("Sales Overlay Help"))
+            hook_error = st.session_state.pop("sales_hook_error", None)
+            if hook_error:
+                st.warning(hook_error)
+            params.hook_text = st.text_area(
+                tr("Hook Text"),
+                key="sales_hook_text",
+                max_chars=800,
+                height=110,
+                placeholder=tr("Hook Text Placeholder"),
+                help=tr("Hook Text Help"),
+            ).strip()
+            hook_count = len([l for l in params.hook_text.splitlines() if l.strip()])
+            if hook_count > 1:
+                st.caption(
+                    tr("Hook Variants Caption").format(count=hook_count)
+                )
+            st.button(
+                tr("Generate Hooks with AI"),
+                key="generate_hooks_button",
+                icon=":material/auto_awesome:",
+                on_click=_generate_hooks_into_session,
+                use_container_width=True,
+            )
+            price_cols = st.columns(2)
+            with price_cols[0]:
+                params.price_text = st.text_input(
+                    tr("Sale Price"),
+                    key="sales_price_text",
+                    max_chars=40,
+                    placeholder="59.000đ",
+                ).strip()
+            with price_cols[1]:
+                params.original_price_text = st.text_input(
+                    tr("Original Price"),
+                    key="sales_original_price_text",
+                    max_chars=40,
+                    placeholder="99.000đ",
+                ).strip()
+            if "sales_cta_text" not in st.session_state:
+                st.session_state["sales_cta_text"] = config.ui.get(
+                    "cta_text", tr(DEFAULT_CTA_TEXT_KEY)
+                )
+            params.cta_text = st.text_input(
+                tr("CTA Text"),
+                key="sales_cta_text",
+                max_chars=80,
+                help=tr("CTA Text Help"),
+            ).strip()
+            _set_runtime_config("ui", "cta_text", params.cta_text)
+            params.affiliate_link = st.text_input(
+                tr("Affiliate Link"),
+                key="sales_affiliate_link",
+                max_chars=500,
+                placeholder="https://s.shopee.vn/...",
+                help=tr("Affiliate Link Help"),
+            ).strip()
+            params.post_caption_enabled = st.checkbox(
+                tr("Generate Post Caption"),
+                value=bool(config.ui.get("post_caption_enabled", True)),
+                key="sales_post_caption_enabled",
+                help=tr("Generate Post Caption Help"),
+            )
+            _set_runtime_config(
+                "ui", "post_caption_enabled", params.post_caption_enabled
+            )
+
+
 def _render_video_settings(panel, params):
     """渲染视频设置并返回本次选择的本地素材。"""
     uploaded_files = []
@@ -6334,6 +6432,16 @@ def _render_video_settings(panel, params):
             _set_runtime_config(
                 "ui", "video_clip_duration", params.video_clip_duration
             )
+            video_count_options = [1, 2, 3, 4, 5]
+            params.video_count = stable_selectbox(
+                tr("Number of Videos Generated Simultaneously"),
+                options=video_count_options,
+                default_value=_saved_ui_choice(
+                    "video_count", video_count_options, 1
+                ),
+                key="video_count_select",
+            )
+            _set_runtime_config("ui", "video_count", params.video_count)
             # 少用的性能/编码参数收进“高级视频设置”，主界面只留做商品视频需要的选项。
             with st.container(key="advanced_settings_video"):
                 with st.expander(tr("Advanced Video Settings"), expanded=False):
@@ -6357,16 +6465,6 @@ def _render_video_settings(panel, params):
                         help=tr("Clip Speed Help"),
                     )
                     _set_runtime_config("ui", "video_clip_speed", params.video_clip_speed)
-                    video_count_options = [1, 2, 3, 4, 5]
-                    params.video_count = stable_selectbox(
-                        tr("Number of Videos Generated Simultaneously"),
-                        options=video_count_options,
-                        default_value=_saved_ui_choice(
-                            "video_count", video_count_options, 1
-                        ),
-                        key="video_count_select",
-                    )
-                    _set_runtime_config("ui", "video_count", params.video_count)
 
                     video_codec_options = [
                         (tr("Default Video Encoder"), DEFAULT_VIDEO_CODEC_OPTION),
@@ -9558,6 +9656,7 @@ def _render_application():
         st.session_state.get("match_materials_to_script", False)
     )
     _render_script_settings(left_panel, params)
+    _render_sales_overlay_settings(left_panel, params)
 
     uploaded_files = _render_video_settings(middle_panel, params)
     uploaded_audio_file, uploaded_bgm_file, voice_mode = _render_audio_settings(

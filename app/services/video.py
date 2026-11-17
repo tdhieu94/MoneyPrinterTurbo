@@ -42,6 +42,7 @@ from app.models.schema import (
     VideoParams,
     VideoTransitionMode,
 )
+from app.services import sales_overlay
 from app.services import bgm as bgm_service
 from app.services.utils import subtitle_shaping, video_effects
 from app.utils import file_security, logging_utils, utils
@@ -2006,6 +2007,16 @@ def generate_video(
                 [video_clip, *text_clips], bg_color=(0, 0, 0)
             )
             clip_stack.callback(video_clip.close)
+
+        if sales_overlay.has_overlays(params):
+            overlay_clips = sales_overlay.build_overlay_clips(
+                params, video_width, video_height, video_clip.duration
+            )
+            if overlay_clips:
+                video_clip = CompositeVideoClip(
+                    [video_clip, *overlay_clips], bg_color=(0, 0, 0)
+                )
+                clip_stack.callback(video_clip.close)
 
         bgm_enabled = bgm_service.should_use_bgm(
             params.bgm_type, params.bgm_volume

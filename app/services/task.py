@@ -38,6 +38,7 @@ from app.services import (
     volcengine_seedance,
     voice,
 )
+from app.services import sales_overlay, sales_post
 from app.services import upload_post
 from app.services import state as sm
 from app.utils import file_security, utils
@@ -1141,12 +1142,14 @@ def generate_final_videos(
                 warnings.append({"code": warning_code, "video_index": index})
 
         logger.info(f"\n\n## generating video: {index} => {final_video_path}")
+        # 多版本带货视频：开头钩子每行一句，第 N 条视频轮流使用第 N 句。
+        video_params = sales_overlay.params_for_variant(params, index)
         bgm_mix_succeeded = video.generate_video(
             video_path=combined_video_path,
             audio_path=audio_file,
             subtitle_path=subtitle_path,
             output_file=final_video_path,
-            params=params,
+            params=video_params,
             bgm_file_override=bgm_file_override,
         )
         if (
@@ -1937,9 +1940,18 @@ def _run_pipeline(
         )
     cross_post_state = const.CROSS_POST_STATE_PENDING if should_cross_post else None
 
+    # 带货发布文案：失败只记录警告，不影响已经生成的视频。
+    post_text = ""
+    if getattr(params, "post_caption_enabled", False):
+        sm.state.update_task(task_id, progress=99)
+        post_text = sales_post.save_post_text(
+            params, video_script, utils.task_dir(task_id)
+        )
+
     kwargs = {
         "videos": final_video_paths,
         "combined_videos": combined_video_paths,
+        "post_text": post_text or None,
         "script": video_script,
         "terms": video_terms,
         "audio_file": audio_file,

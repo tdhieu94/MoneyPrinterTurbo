@@ -122,6 +122,16 @@ class VideoParams(BaseModel):
     match_materials_to_script: bool = False
     video_count: int = Field(default=1, ge=1)
 
+    # Sales overlays for affiliate product videos (empty = not shown).
+    hook_text: str = Field(default="", max_length=800)
+    price_text: str = Field(default="", max_length=40)
+    original_price_text: str = Field(default="", max_length=40)
+    cta_text: str = Field(default="", max_length=80)
+    # Ready-to-paste post text (caption, hashtags, affiliate link) saved
+    # next to the finished video.
+    affiliate_link: str = Field(default="", max_length=500)
+    post_caption_enabled: bool = False
+
     video_source: Optional[str] = "pexels"
     video_materials: Optional[List[MaterialInfo]] = (
         None  # Materials used to generate the video

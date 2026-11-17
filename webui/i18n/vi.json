@@ -523,6 +523,26 @@
     "Step 1 Tip": "#### Mẹo bước 1\n\n- **Chủ đề video**: ghi tên sản phẩm và điểm nổi bật, ví dụ *Khăn giấy Top Gia 10 gói, siêu mềm, giá 59k*.\n- Mở **Cài Đặt Kịch Bản Nâng Cao** để chọn mẫu kịch bản bán hàng.\n- Bấm **Tạo Kịch Bản & Từ Khóa Bằng AI**, rồi đọc lại và sửa giá, ưu đãi cho đúng.",
     "Step 2 Tip": "#### Mẹo bước 2\n\n- **Nguồn Video**: chọn **Tệp cục bộ**, rồi kéo thả ảnh hoặc clip sản phẩm (jpg, png, webp, mp4).\n- **Cách khớp khung hình nguồn**: chọn **Hiện đủ ảnh, nền mờ** để ảnh không bị cắt.\n- **Chuyển động hình ảnh**: chọn **Tĩnh** để sản phẩm hiện rõ.\n- Nên trộn thêm vài clip quay thật: Shopee Video ưu tiên video thật hơn ảnh ghép.",
     "Step 3 Tip": "#### Mẹo bước 3\n\n- **Dịch Vụ Giọng Nói**: chọn **VieNeu TTS (Tiếng Việt, offline)**, miễn phí và chạy ngay trên máy.\n- Giọng gợi ý: **Ngọc Lan** (nữ) hoặc **Gia Bảo** (nam).\n- Nghe thử trước khi tạo video. Cứ 40 giây giọng đọc mất khoảng 1 phút để tạo.",
-    "Step 4 Tip": "#### Mẹo bước 4\n\n- **Phông chữ**: chọn **BeVietnamPro-Bold** để hiện đúng dấu tiếng Việt.\n- Vị trí **Dưới cùng** dễ đọc nhất trên điện thoại.\n- Xong thì bấm **Tạo Video** ở cuối trang."
+    "Step 4 Tip": "#### Mẹo bước 4\n\n- **Phông chữ**: chọn **BeVietnamPro-Bold** để hiện đúng dấu tiếng Việt.\n- Vị trí **Dưới cùng** dễ đọc nhất trên điện thoại.\n- Xong thì bấm **Tạo Video** ở cuối trang.",
+    "Sales Overlay Settings": "Chữ bán hàng trên video",
+    "Sales Overlay Help": "Để trống ô nào thì ô đó không hiện trên video.",
+    "Hook Text": "Câu mở đầu (3 giây đầu)",
+    "Hook Text Placeholder": "Ví dụ: Khăn giấy 59k mà mềm thế này?\nHết cảnh giấy bở chỉ với 59k",
+    "Sale Price": "Giá bán",
+    "Original Price": "Giá gốc (gạch ngang)",
+    "CTA Text": "Câu kêu gọi mua (cuối video)",
+    "CTA Text Help": "Hiện trong khoảng 3,5 giây cuối video.",
+    "Sales Overlay Default CTA": "Bấm giỏ hàng để mua ngay",
+    "Affiliate Link": "Link affiliate Shopee",
+    "Affiliate Link Help": "Link rút gọn dạng s.shopee.vn lấy từ Shopee Affiliate. Sẽ được ghép vào phần chữ đăng bài.",
+    "Generate Post Caption": "Tạo sẵn chữ đăng bài (caption, hashtag, link)",
+    "Generate Post Caption Help": "Sau khi làm xong video, AI viết caption, thêm giá, link và hashtag. Lưu thành file dang-bai.txt cạnh video.",
+    "Post Caption Ready": "Chữ đăng bài",
+    "Post Caption Copy Help": "Bấm biểu tượng sao chép ở góc khung rồi dán khi đăng video.",
+    "Hook Text Help": "Mỗi dòng một câu. Nếu bạn làm nhiều video một lần, video thứ 1 dùng câu 1, video thứ 2 dùng câu 2…",
+    "Hook Variants Caption": "Có {count} câu mở đầu. Ở bước ②, chọn \"Số video mỗi lần\" là {count} để ra {count} phiên bản khác nhau.",
+    "Generate Hooks with AI": "Tạo 5 câu mở đầu bằng AI",
+    "Hooks Need Subject": "Hãy nhập chủ đề video (tên sản phẩm) trước khi tạo câu mở đầu.",
+    "Hooks Generation Failed": "AI chưa tạo được câu mở đầu. Hãy thử lại sau giây lát."
   }
 }

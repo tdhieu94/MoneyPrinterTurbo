@@ -1483,3 +1483,58 @@ if __name__ == "__main__":
     )
     print("######################")
     print(search_terms)
+
+
+# =============================================================================
+# 带货视频开头钩子：为同一个商品生成多句不同角度的开场短句，用于多版本视频。
+# =============================================================================
+MAX_HOOK_LENGTH = 70
+
+
+def _parse_hooks(response: str, count: int) -> List[str]:
+    hooks: List[str] = []
+    for raw_line in str(response or "").splitlines():
+        line = re.sub(r"^\s*(?:[-*•]|\d+[.)])\s*", "", raw_line).strip()
+        line = line.strip(" \"'“”")
+        if not line or len(line) > MAX_HOOK_LENGTH:
+            continue
+        if line.lower() not in {h.lower() for h in hooks}:
+            hooks.append(line)
+        if len(hooks) >= count:
+            break
+    return hooks
+
+
+def generate_hooks(subject: str, script: str = "", count: int = 5) -> List[str]:
+    """Return up to ``count`` short Vietnamese hook lines for a product video.
+
+    Returns an empty list when the model is unavailable, so callers can show
+    a friendly message instead of failing.
+    """
+    count = max(1, min(int(count or 5), 10))
+    subject = _limit_social_text(subject, MAX_SOCIAL_SUBJECT_LENGTH, "subject")
+    script = _limit_social_text(script, MAX_SOCIAL_SCRIPT_LENGTH, "script")
+    prompt = f"""Bạn là người viết nội dung video bán hàng ngắn trên Shopee Video và TikTok.
+Viết đúng {count} câu mở đầu (hook) khác nhau cho video về sản phẩm dưới đây.
+Yêu cầu:
+- Tiếng Việt tự nhiên, mỗi câu tối đa 12 từ, đọc trong 3 giây đầu.
+- Mỗi câu một góc khác nhau: câu hỏi gây tò mò, nêu vấn đề, giá hời, so sánh, kết quả bất ngờ.
+- Không dùng emoji, không hashtag, không đánh số, không ngoặc kép.
+- Không bịa thông số hay giá không có trong thông tin.
+- Mỗi câu một dòng, không viết gì thêm.
+
+Sản phẩm: {subject}
+Kịch bản (nếu có): {script}
+"""
+    for _ in range(_max_retries):
+        try:
+            response = _generate_response(prompt)
+            if isinstance(response, str) and response.startswith("Error: "):
+                logger.error(f"failed to generate hooks: {response}")
+                return []
+            hooks = _parse_hooks(response, count)
+            if hooks:
+                return hooks
+        except Exception as exc:
+            logger.warning(f"failed to generate hooks: {type(exc).__name__}: {exc}")
+    return []
