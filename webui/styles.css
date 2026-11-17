@@ -516,15 +516,9 @@ div[class*="st-key-task_row_"] button[kind="secondary"] p {
     --mpt-text-muted: #5f6368;
 }
 
-@media (prefers-color-scheme: dark) {
-    :root {
-        --mpt-accent-soft: rgba(238, 77, 45, 0.14);
-        --mpt-page-bg: #0f1116;
-        --mpt-card-bg: #171a21;
-        --mpt-card-border: #2a2e37;
-        --mpt-text-muted: #a5abb6;
-    }
-}
+/* The desktop launcher pins Streamlit's light theme, so these colours are
+   not switched by the Windows dark/light setting (a dark page behind light
+   widgets would be unreadable). */
 
 div[data-testid="stApp"],
 div[data-testid="stAppViewContainer"] {
