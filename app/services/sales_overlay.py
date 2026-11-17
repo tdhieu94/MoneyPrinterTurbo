@@ -69,7 +69,7 @@ def params_for_variant(params, index: int):
 def has_overlays(params) -> bool:
     return any(
         str(getattr(params, name, "") or "").strip()
-        for name in ("hook_text", "price_text", "cta_text")
+        for name in ("hook_text", "price_text", "cta_text", "channel_name")
     )
 
 
@@ -220,6 +220,23 @@ def render_cta(text: str, width: int, font_path: str | None = None) -> Image.Ima
     return image
 
 
+def render_channel(name: str, width: int, font_path: str | None = None) -> Image.Image:
+    """A small, semi-transparent channel tag, e.g. "@reviewnhacua"."""
+    text = name.strip()
+    size = max(14, int(width * 0.03))
+    font = _font(size, font_path)
+    text = _wrap(text, font, int(width * 0.6))[0]
+    pad_x = int(size * 0.7)
+    pad_y = int(size * 0.35)
+    box_w = int(font.getlength(text)) + pad_x * 2
+    box_h = int(size * 1.25) + pad_y * 2
+    image = Image.new("RGBA", (box_w, box_h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((0, 0, box_w - 1, box_h - 1), radius=box_h // 2, fill=(0, 0, 0, 110))
+    draw.text((pad_x, pad_y), text, font=font, fill=(255, 255, 255, 230))
+    return image
+
+
 def _clip(image: Image.Image, span, x, y):
     start, end = span
     return (
@@ -240,6 +257,10 @@ def build_overlay_clips(params, width: int, height: int, duration: float) -> lis
     timeline = plan_timeline(duration, hook=bool(hook), price=bool(price), cta=bool(cta))
 
     clips = []
+    channel = str(getattr(params, "channel_name", "") or "").strip()
+    if channel and duration > 0:
+        image = render_channel(channel, width)
+        clips.append(_clip(image, (0.0, duration), width * 0.04, height * 0.035))
     if timeline.hook:
         image = render_hook(hook, width)
         clips.append(_clip(image, timeline.hook, 0, height * 0.12))

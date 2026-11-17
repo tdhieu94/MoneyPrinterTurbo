@@ -84,3 +84,31 @@ def test_multi_line_hook_renders_first_line_only():
     params = _params(hook_text="Dòng một\nDòng hai")
     clips = so.build_overlay_clips(params, 1080, 1920, 10)
     assert len(clips) == 1
+
+
+def test_channel_name_tag_stays_for_the_whole_video():
+    from app.models.schema import VideoParams
+    from app.services import sales_overlay
+
+    params = VideoParams(video_subject="x", channel_name="@reviewnhacua")
+    assert sales_overlay.has_overlays(params)
+    clips = sales_overlay.build_overlay_clips(params, 1080, 1920, 20.0)
+    assert len(clips) == 1
+    tag = clips[0]
+    assert tag.start == 0 and abs(tag.duration - 20.0) < 1e-6
+    assert tag.size[0] < 1080 * 0.7
+
+
+def test_real_footage_leads_the_slideshow():
+    from types import SimpleNamespace
+
+    from app.services import video
+
+    rendered = "a" * 64 + ".gentle-" + "b" * 16 + ".mp4"
+    assert video.is_rendered_image_clip("/x/" + rendered)
+    assert not video.is_rendered_image_clip("/x/mo-hop.mp4")
+    items = [SimpleNamespace(source_file_path=p) for p in (rendered, rendered, "/x/mo-hop.mp4", "/x/b.mp4")]
+    ordered = video._lead_with_real_footage(items)
+    assert [i.source_file_path for i in ordered] == ["/x/mo-hop.mp4", rendered, rendered, "/x/b.mp4"]
+    only_photos = items[:2]
+    assert video._lead_with_real_footage(only_photos) == only_photos

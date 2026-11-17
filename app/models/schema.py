@@ -133,6 +133,10 @@ class VideoParams(BaseModel):
     # next to the finished video.
     affiliate_link: str = Field(default="", max_length=500)
     post_caption_enabled: bool = False
+    # Open the video on filmed footage (when there is any) before photo clips.
+    real_clip_first: bool = False
+    # Small channel name shown in a corner for the whole video.
+    channel_name: str = Field(default="", max_length=40)
 
     video_source: Optional[str] = "pexels"
     video_materials: Optional[List[MaterialInfo]] = (

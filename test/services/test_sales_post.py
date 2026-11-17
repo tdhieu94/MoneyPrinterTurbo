@@ -42,7 +42,8 @@ def test_save_post_text_writes_file(tmp_path):
         text = sales_post.save_post_text(params, "script", str(tmp_path))
     assert "Caption hay" in text
     saved = (tmp_path / sales_post.POST_FILENAME).read_text(encoding="utf-8")
-    assert saved == text
+    assert text.strip() in saved
+    assert "===== Shopee Video =====" in saved and "===== TikTok =====" in saved
 
 
 def test_save_post_text_failure_returns_empty(tmp_path):

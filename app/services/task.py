@@ -1083,6 +1083,7 @@ def generate_final_videos(
             progress_callback=_stage_progress_reporter(
                 task_id, _progress, _progress + combine_share
             ),
+            real_clip_first=bool(getattr(params, "real_clip_first", False)),
             **batch_options,
         )
         if allocate_batch_materials:
@@ -1941,17 +1942,19 @@ def _run_pipeline(
     cross_post_state = const.CROSS_POST_STATE_PENDING if should_cross_post else None
 
     # 带货发布文案：失败只记录警告，不影响已经生成的视频。
-    post_text = ""
+    post_texts = {}
     if getattr(params, "post_caption_enabled", False):
         sm.state.update_task(task_id, progress=99)
-        post_text = sales_post.save_post_text(
+        post_texts = sales_post.save_post_texts(
             params, video_script, utils.task_dir(task_id)
         )
+    post_text = post_texts.get("facebook", "")
 
     kwargs = {
         "videos": final_video_paths,
         "combined_videos": combined_video_paths,
         "post_text": post_text or None,
+        "post_texts": post_texts or None,
         "script": video_script,
         "terms": video_terms,
         "audio_file": audio_file,
