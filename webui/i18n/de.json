@@ -514,6 +514,15 @@
     "No Configured Providers": "Noch keine Anbieter eingerichtet.",
     "Provider Configuration Changed": "Die Konfiguration hat sich geändert. Prüfe die Einstellungen dieses Anbieters.",
     "VieNeu Python Path": "VieNeu Python Path (python.exe)",
-    "Fit with Blurred Background": "Fit with Blurred Background"
+    "Fit with Blurred Background": "Fit with Blurred Background",
+    "Step Script Tab": "① Product & script",
+    "Step Visuals Tab": "② Visuals",
+    "Step Voice Tab": "③ Voice & music",
+    "Step Subtitles Tab": "④ Subtitles",
+    "Advanced Video Settings": "Advanced video settings",
+    "Step 1 Tip": "#### Step 1 tips\n\n- **Video Subject**: the product name and its selling points, e.g. *Soft facial tissues, 10 packs, $5*.\n- Open **Advanced Script Settings** to pick a sales script template.\n- Generate the script with AI, then check the price and offer.",
+    "Step 2 Tip": "#### Step 2 tips\n\n- **Video Source**: choose **Local file** and drop in product photos or clips (jpg, png, webp, mp4).\n- **Source Frame Fit**: **Fit with Blurred Background** keeps the whole photo.\n- **Image Motion**: **Static** keeps the product sharp.\n- Mix in a few real clips: short-video platforms favour real footage over slideshows.",
+    "Step 3 Tip": "#### Step 3 tips\n\n- Pick a voiceover service and voice that match the script language.\n- Preview the voice before generating the video.",
+    "Step 4 Tip": "#### Step 4 tips\n\n- Pick a font that supports the script language.\n- **Bottom** is the easiest position to read on a phone.\n- Then click **Generate Video** at the bottom of the page."
   }
 }
