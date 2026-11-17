@@ -121,3 +121,27 @@ def test_backup_round_trip_without_secrets(storage, monkeypatch):
     assert result["settings"] == {"font_size": 72, "language": "vi"}
     with pytest.raises(app_backup.BackupError):
         app_backup.restore_backup(b"not a zip")
+
+
+def test_engagement_tips():
+    from app.services import affiliate, sales_post
+
+    assert "problem_solution" in affiliate.AFFILIATE_TEMPLATE_IDS
+    prompt = affiliate.get_affiliate_script_prompt("problem_solution")
+    assert "45-70 từ" in prompt and len(prompt) <= affiliate.MAX_SCRIPT_PROMPT_LENGTH
+
+    texts = sales_post.compose_platform_texts(
+        caption="Khăn giấy mềm", hashtags=["#a"], price="59k", link="https://s.shopee.vn/x",
+        question_seed="Khăn giấy",
+    )
+    question = sales_post.engagement_question("Khăn giấy")
+    for text in texts.values():
+        assert question in text
+    facebook_blocks = texts["facebook"].strip().split("\n\n")
+    assert facebook_blocks[-1].startswith("#") and facebook_blocks[-2] == question
+    plain = sales_post.compose_platform_texts(caption="x", hashtags=[], ask_question=False)
+    assert all(q not in plain["tiktok"] for q in sales_post.ENGAGEMENT_QUESTIONS)
+
+    assert posting_log.posting_window_status(12) == "now"
+    assert posting_log.posting_window_status(18) == "soon"
+    assert posting_log.posting_window_status(15) == ""

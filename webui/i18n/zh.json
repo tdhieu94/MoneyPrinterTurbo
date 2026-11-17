@@ -886,6 +886,10 @@
     "App Backup Help": "将发布记录、发布计划、有效开头文案和设置保存为一个 .zip 文件（不含 API Key）。在另一台电脑上传该文件即可恢复。",
     "Download Backup": "下载备份",
     "Restore Backup": "从备份恢复",
-    "Backup Restored": "已恢复 {files} 个数据文件和 {settings} 项设置。"
+    "Backup Restored": "已恢复 {files} 个数据文件和 {settings} 项设置。",
+    "Affiliate Template Problem Solution": "痛点 → 解决 → 优惠（短）",
+    "Best Posting Hours": "最佳发布时间：11:00–13:00 和 19:00–22:00。",
+    "Best Posting Now": "现在是高峰时段，马上发布今天的视频吧。",
+    "Best Posting Soon": "一小时内进入高峰时段，准备好今天的视频。"
   }
 }

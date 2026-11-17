@@ -257,3 +257,17 @@ def auto_plan(task_ids: list[str], today: str, per_day: int = 1) -> dict[str, st
         merged.update(keep)
         _save_plan(merged)
         return keep
+
+
+# Hours when Vietnamese shoppers scroll the most (lunch break and evening).
+BEST_POSTING_WINDOWS = ((11, 13), (19, 22))
+
+
+def posting_window_status(hour: int) -> str:
+    """"now" inside a good window, "soon" within the hour before one, else ""."""
+    for start, end in BEST_POSTING_WINDOWS:
+        if start <= hour < end:
+            return "now"
+        if hour == start - 1:
+            return "soon"
+    return ""

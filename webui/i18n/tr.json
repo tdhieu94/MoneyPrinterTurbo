@@ -628,6 +628,10 @@
     "App Backup Help": "Saves the posting log, schedule, winning opening lines and your settings in one .zip file (no API keys). Upload that file on another computer to restore.",
     "Download Backup": "Download backup",
     "Restore Backup": "Restore from backup",
-    "Backup Restored": "Restored {files} data file(s) and {settings} setting(s)."
+    "Backup Restored": "Restored {files} data file(s) and {settings} setting(s).",
+    "Affiliate Template Problem Solution": "Problem → Solution → Offer (short)",
+    "Best Posting Hours": "Best times to post: 11:00–13:00 and 19:00–22:00.",
+    "Best Posting Now": "It's a peak time right now. Post today's video now.",
+    "Best Posting Soon": "A peak time starts within the hour. Get today's video ready."
   }
 }
