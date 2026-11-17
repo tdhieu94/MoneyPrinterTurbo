@@ -543,6 +543,16 @@
     "Hook Variants Caption": "Có {count} câu mở đầu. Ở bước ②, chọn \"Số video mỗi lần\" là {count} để ra {count} phiên bản khác nhau.",
     "Generate Hooks with AI": "Tạo 5 câu mở đầu bằng AI",
     "Hooks Need Subject": "Hãy nhập chủ đề video (tên sản phẩm) trước khi tạo câu mở đầu.",
-    "Hooks Generation Failed": "AI chưa tạo được câu mở đầu. Hãy thử lại sau giây lát."
+    "Hooks Generation Failed": "AI chưa tạo được câu mở đầu. Hãy thử lại sau giây lát.",
+    "Product Batch Settings": "Làm hàng loạt từ file Excel",
+    "Product Batch Help": "Mỗi dòng là một sản phẩm: tên, giá, giá gốc, câu mở đầu, link affiliate và thư mục ảnh. Các cài đặt khác (giọng đọc, phụ đề, nhạc) lấy theo form này. Video được làm lần lượt từng cái.",
+    "Download Product Template": "Tải file mẫu",
+    "Product Batch Upload": "Danh sách sản phẩm (.xlsx hoặc .csv)",
+    "Product Batch Column Name": "Sản phẩm",
+    "Product Batch Column Images": "Thư mục ảnh",
+    "Generate Product Batch": "Làm video cho {count} sản phẩm",
+    "Product Batch Submitted": "Đã xếp hàng {count} video sản phẩm. App làm lần lượt từng video; xem tiến độ ở Quản lý tác vụ.",
+    "Product Batch Needs TTS": "Làm hàng loạt cần dùng giọng AI. Hãy đổi phần lồng tiếng sang giọng đọc thay vì tải file âm thanh.",
+    "Product Batch Row Error": "Dòng {line}: {error}"
   }
 }

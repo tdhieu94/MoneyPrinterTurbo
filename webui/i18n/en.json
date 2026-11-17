@@ -805,6 +805,16 @@
     "Hook Variants Caption": "{count} hooks. Set the number of videos per run in step ② to get {count} different versions.",
     "Generate Hooks with AI": "Generate 5 hooks with AI",
     "Hooks Need Subject": "Enter the video subject (product name) before generating hooks.",
-    "Hooks Generation Failed": "AI could not generate hooks. Please try again in a moment."
+    "Hooks Generation Failed": "AI could not generate hooks. Please try again in a moment.",
+    "Product Batch Settings": "Batch videos from an Excel file",
+    "Product Batch Help": "One row per product: name, price, original price, hook, affiliate link and the folder with its photos. Every other setting (voice, subtitles, music) comes from this form. Videos are made one after another.",
+    "Download Product Template": "Download template file",
+    "Product Batch Upload": "Product list (.xlsx or .csv)",
+    "Product Batch Column Name": "Product",
+    "Product Batch Column Images": "Photo folder",
+    "Generate Product Batch": "Make videos for {count} products",
+    "Product Batch Submitted": "Queued {count} product videos. They are made one at a time; follow them in the task manager.",
+    "Product Batch Needs TTS": "Batch videos need an AI voice. Switch the voiceover away from an uploaded audio file.",
+    "Product Batch Row Error": "Row {line}: {error}"
   }
 }
