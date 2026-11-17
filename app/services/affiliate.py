@@ -49,6 +49,19 @@ AFFILIATE_SCRIPT_TEMPLATES = {
     ),
 }
 
+AFFILIATE_SCRIPT_TEMPLATES["problem_solution"] = (
+    "Đây là video ngắn bán hàng theo công thức Vấn đề → Giải pháp → Ưu đãi để tiếp thị liên kết.\n"
+    "Cấu trúc:\n"
+    "1. Câu mở đầu nói thẳng vào một nỗi khó chịu cụ thể người xem hay gặp, dạng câu hỏi hoặc tình huống quen thuộc.\n"
+    "2. Làm vấn đề rõ hơn trong một câu: nó phiền thế nào, tốn thời gian hay tiền ra sao.\n"
+    "3. Giới thiệu sản phẩm là cách giải quyết, kèm một hình ảnh dễ hình dung khi dùng.\n"
+    "4. Một bằng chứng ngắn: điểm nổi bật cụ thể nhất có trong mô tả (chất liệu, dung tích, số lượng...).\n"
+    "5. Giá hoặc ưu đãi nếu có.\n"
+    "6. Kêu gọi bấm giỏ hàng ngay.\n"
+    "Riêng video này: tổng 45-70 từ để dài khoảng 15-30 giây; mỗi câu không quá 15 từ.\n\n"
+    + _COMMON_RULES
+)
+
 AFFILIATE_TEMPLATE_IDS = (AFFILIATE_TEMPLATE_NONE, *AFFILIATE_SCRIPT_TEMPLATES)
 
 

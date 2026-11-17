@@ -87,8 +87,36 @@ def test_platform_posts_follow_each_platform():
     )
     assert set(texts) == {"shopee", "tiktok", "facebook"}
     assert "https://" not in texts["shopee"]
-    assert len(texts["shopee"].split("\n\n")[0]) <= sales_post.SHOPEE_CAPTION_LIMIT
+    assert len(texts["shopee"].strip()) <= sales_post.SHOPEE_CAPTION_LIMIT
+    assert "59.000đ" in texts["shopee"] and "Bấm giỏ hàng để mua" in texts["shopee"]
+    assert "#" in texts["shopee"]
     assert "bio" in texts["tiktok"] and "https://" not in texts["tiktok"]
     assert "https://s.shopee.vn/abc" in texts["facebook"]
     combined = sales_post.platform_texts_file(texts)
     assert combined.index("Shopee Video") < combined.index("TikTok") < combined.index("Facebook Reels")
+
+
+def test_shopee_description_fits_the_whole_limit():
+    long_caption = "Khăn giấy siêu mềm, dai, không bụi, an toàn cho bé và cả nhà. " * 6
+    for kwargs in (
+        {"price": "59.000đ", "original_price": "89.000đ"},
+        {"price": "1.259.000đ", "original_price": "2.999.000đ", "cta": "Chốt đơn ngay hôm nay kẻo hết hàng nha cả nhà ơi " * 3},
+        {},
+    ):
+        texts = sales_post.compose_platform_texts(
+            caption=long_caption,
+            hashtags=["#khangiaymem", "#giadungtienich", "#mevabe", "#sale", "#freeship"],
+            link="https://s.shopee.vn/abc",
+            **kwargs,
+        )
+        shopee = texts["shopee"].strip()
+        assert len(shopee) <= sales_post.SHOPEE_CAPTION_LIMIT, shopee
+        assert shopee.startswith("Khăn giấy siêu mềm")
+        if kwargs.get("price"):
+            assert kwargs["price"] in shopee
+
+    short = sales_post.compose_platform_texts(
+        caption="Khăn giấy mềm", hashtags=["#a"], price="59k", question_seed="x"
+    )["shopee"]
+    assert sales_post.engagement_question("x") in short
+    assert len(short.strip()) <= sales_post.SHOPEE_CAPTION_LIMIT

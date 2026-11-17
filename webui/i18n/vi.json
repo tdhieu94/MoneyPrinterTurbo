@@ -628,6 +628,10 @@
     "App Backup Help": "Lưu nhật ký đăng, lịch đăng, câu mở đầu ra đơn và cài đặt vào một file .zip (không chứa API key). Tải file đó lên máy khác để khôi phục.",
     "Download Backup": "Tải file sao lưu",
     "Restore Backup": "Khôi phục từ file sao lưu",
-    "Backup Restored": "Đã khôi phục {files} file dữ liệu và {settings} mục cài đặt."
+    "Backup Restored": "Đã khôi phục {files} file dữ liệu và {settings} mục cài đặt.",
+    "Affiliate Template Problem Solution": "Vấn đề → Giải pháp → Ưu đãi (ngắn)",
+    "Best Posting Hours": "Giờ đăng đẹp: 11h–13h và 19h–22h.",
+    "Best Posting Now": "Đang là giờ vàng, đăng video hôm nay ngay nhé.",
+    "Best Posting Soon": "Sắp tới giờ vàng trong vòng 1 tiếng, chuẩn bị video hôm nay nhé."
   }
 }

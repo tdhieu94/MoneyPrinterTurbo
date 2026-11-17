@@ -2303,11 +2303,12 @@ def _render_generation_task_snapshot(task_id, task):
                     st.tabs([label for _, label in available]), available
                 ):
                     with platform_tab:
-                        st.code(
-                            str(post_texts[key]).strip(),
-                            language=None,
-                            wrap_lines=True,
-                        )
+                        text = str(post_texts[key]).strip()
+                        st.code(text, language=None, wrap_lines=True)
+                        if key == "shopee":
+                            st.caption(
+                                f"{len(text)}/{sales_post_service.SHOPEE_CAPTION_LIMIT}"
+                            )
             else:
                 st.code(post_text, language=None, wrap_lines=True)
     if state == const.TASK_STATE_COMPLETE:
@@ -6032,6 +6033,7 @@ def _render_script_settings(panel, params):
                         "quick_review": tr("Affiliate Template Quick Review"),
                         "top_reasons": tr("Affiliate Template Top Reasons"),
                         "deal_alert": tr("Affiliate Template Deal Alert"),
+                        "problem_solution": tr("Affiliate Template Problem Solution"),
                     }
                     stable_selectbox(
                         tr("Affiliate Script Template"),
@@ -6164,6 +6166,7 @@ def _generate_hooks_into_session():
 
 
 SHOPEE_PRESET_VIENEU_VOICE = "vieneu:Ngọc Lan-Female"
+SHOPEE_PRESET_VOICE_RATE = 1.15
 
 
 def _apply_shopee_preset():
@@ -6180,6 +6183,12 @@ def _apply_shopee_preset():
     _set_stable_widget_value("video_transition_mode_select", VideoTransitionMode.fade_in.value)
     st.session_state["real_clip_first_checkbox"] = True
     st.session_state["paragraph_number_input"] = 1
+    # 短视频更适合“痛点 → 解决 → 优惠”的结构和略快的语速。
+    _set_stable_widget_value("affiliate_script_template_select", "problem_solution")
+    st.session_state["video_script_prompt"] = affiliate_service.get_affiliate_script_prompt(
+        "problem_solution"
+    )
+    _set_stable_widget_value("voice_rate_select", SHOPEE_PRESET_VOICE_RATE)
     if str(config.vieneu.get("python_path", "") or "").strip():
         _set_stable_widget_value("voice_mode_control", VOICE_MODE_TTS)
         _set_stable_widget_value("tts_server_select", "vieneu")
@@ -6430,12 +6439,18 @@ def _render_posting_schedule():
         [task["task_id"] for task in reversed(finished)], today.isoformat()
     )
     due_today = [task for task in finished if plan.get(task["task_id"], "") <= today.isoformat()]
+    st.caption(tr("Best Posting Hours"))
     if due_today:
         st.warning(
             tr("Posting Schedule Today").format(
                 subjects=", ".join(_format_task_subject(t["subject"], max_length=40) for t in due_today)
             )
         )
+        window = posting_log_service.posting_window_status(datetime.now().hour)
+        if window == "now":
+            st.success(tr("Best Posting Now"))
+        elif window == "soon":
+            st.info(tr("Best Posting Soon"))
     for task in sorted(finished, key=lambda t: plan.get(t["task_id"], "9999")):
         task_id = task["task_id"]
         row = st.columns([4, 2, 2], vertical_alignment="center")
@@ -9404,7 +9419,7 @@ def _render_audio_settings(panel, params):
             params.voice_rate = 1.0
             uploaded_audio_file = None
             voice_volume_options = [0.6, 0.8, 1.0, 1.2, 1.5, 2.0, 3.0, 4.0, 5.0]
-            voice_rate_options = [0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.5, 1.8, 2.0]
+            voice_rate_options = [0.8, 0.9, 1.0, 1.1, 1.15, 1.2, 1.3, 1.5, 1.8, 2.0]
 
             if tts_mode_enabled:
                 voice_control_cols = st.columns(2)
@@ -9431,7 +9446,7 @@ def _render_audio_settings(panel, params):
                             "voice_rate", voice_rate_options, 1.0
                         ),
                         key="voice_rate_select",
-                        format_func=lambda value: f"{value:.1f}×",
+                        format_func=lambda value: f"{value:g}×",
                         help=speed_not_supported_help or tr("Voiceover Speed Help"),
                         disabled=bool(speed_not_supported_help),
                     )
