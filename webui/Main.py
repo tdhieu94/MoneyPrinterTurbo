@@ -6252,15 +6252,16 @@ def _render_shopee_preset_button():
     with st.container(key="shopee_preset_bar"):
         preset_cols = st.columns([2, 3, 4], vertical_alignment="bottom")
         with preset_cols[0]:
-            stable_selectbox(
+            # 选项直接使用翻译后的名称（不用 format_func），再映射回品类 key。
+            labels = {tr(preset["label"]): key for key, preset in CATEGORY_PRESETS.items()}
+            selected_label = stable_selectbox(
                 tr("Product Category"),
-                options=list(CATEGORY_PRESETS),
-                default_value="general",
+                options=list(labels),
+                default_value=tr(CATEGORY_PRESETS["general"]["label"]),
                 key="shopee_preset_category_select",
-                format_func=lambda value: tr(CATEGORY_PRESETS[value]["label"]),
             )
-            st.session_state["shopee_preset_category"] = st.session_state.get(
-                localized_widget_key("shopee_preset_category_select"), "general"
+            st.session_state["shopee_preset_category"] = labels.get(
+                selected_label, "general"
             )
         with preset_cols[1]:
             st.button(
