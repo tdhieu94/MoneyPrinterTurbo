@@ -5848,7 +5848,7 @@ def _render_loomloom_script_generation(params):
 def _render_script_settings(panel, params):
     """渲染文案设置并更新生成参数。"""
     with panel:
-        with st.container(border=True):
+        with st.container(border=True, key="step_card_script"):
             st.write(tr("Video Script Settings"))
             # 标签行需要容纳“配置大模型”入口，因此无法继续使用 text_area
             # 内置标签。把标签和输入框收进同一个字段容器后，可覆盖内部间距，
@@ -6061,7 +6061,7 @@ def _render_video_settings(panel, params):
     """渲染视频设置并返回本次选择的本地素材。"""
     uploaded_files = []
     with panel:
-        with st.container(border=True):
+        with st.container(border=True, key="step_card_visuals"):
             st.write(tr("Video Settings"))
             video_concat_modes = [
                 (tr("Sequential"), "sequential"),
@@ -6334,97 +6334,100 @@ def _render_video_settings(panel, params):
             _set_runtime_config(
                 "ui", "video_clip_duration", params.video_clip_duration
             )
-            clip_speed_key = localized_widget_key("video_clip_speed_slider")
-            # session_state 可能来自旧任务、API 参数或旧版页面状态。控件创建前
-            # 统一归一化，既保留合法选择，也确保 slider 始终收到 0.5～2.0
-            # 范围内的有限浮点数。
-            st.session_state[clip_speed_key] = utils.normalize_clip_speed(
-                st.session_state.get(
-                    clip_speed_key,
-                    _saved_ui_number("video_clip_speed", 1.0, 0.5, 2.0),
-                )
-            )
-            params.video_clip_speed = st.slider(
-                tr("Clip Speed"),
-                min_value=0.5,
-                max_value=2.0,
-                step=0.05,
-                format="%.2fx",
-                key=clip_speed_key,
-                help=tr("Clip Speed Help"),
-            )
-            _set_runtime_config("ui", "video_clip_speed", params.video_clip_speed)
-            video_count_options = [1, 2, 3, 4, 5]
-            params.video_count = stable_selectbox(
-                tr("Number of Videos Generated Simultaneously"),
-                options=video_count_options,
-                default_value=_saved_ui_choice(
-                    "video_count", video_count_options, 1
-                ),
-                key="video_count_select",
-            )
-            _set_runtime_config("ui", "video_count", params.video_count)
+            # 少用的性能/编码参数收进“高级视频设置”，主界面只留做商品视频需要的选项。
+            with st.container(key="advanced_settings_video"):
+                with st.expander(tr("Advanced Video Settings"), expanded=False):
+                    clip_speed_key = localized_widget_key("video_clip_speed_slider")
+                    # session_state 可能来自旧任务、API 参数或旧版页面状态。控件创建前
+                    # 统一归一化，既保留合法选择，也确保 slider 始终收到 0.5～2.0
+                    # 范围内的有限浮点数。
+                    st.session_state[clip_speed_key] = utils.normalize_clip_speed(
+                        st.session_state.get(
+                            clip_speed_key,
+                            _saved_ui_number("video_clip_speed", 1.0, 0.5, 2.0),
+                        )
+                    )
+                    params.video_clip_speed = st.slider(
+                        tr("Clip Speed"),
+                        min_value=0.5,
+                        max_value=2.0,
+                        step=0.05,
+                        format="%.2fx",
+                        key=clip_speed_key,
+                        help=tr("Clip Speed Help"),
+                    )
+                    _set_runtime_config("ui", "video_clip_speed", params.video_clip_speed)
+                    video_count_options = [1, 2, 3, 4, 5]
+                    params.video_count = stable_selectbox(
+                        tr("Number of Videos Generated Simultaneously"),
+                        options=video_count_options,
+                        default_value=_saved_ui_choice(
+                            "video_count", video_count_options, 1
+                        ),
+                        key="video_count_select",
+                    )
+                    _set_runtime_config("ui", "video_count", params.video_count)
 
-            video_codec_options = [
-                (tr("Default Video Encoder"), DEFAULT_VIDEO_CODEC_OPTION),
-                ("libx264 (CPU)", "libx264"),
-                ("NVIDIA NVENC (h264_nvenc)", "h264_nvenc"),
-                ("AMD AMF (h264_amf)", "h264_amf"),
-                ("Intel QSV (h264_qsv)", "h264_qsv"),
-                ("Windows MediaFoundation (h264_mf)", "h264_mf"),
-                ("macOS VideoToolbox (h264_videotoolbox)", "h264_videotoolbox"),
-            ]
-            saved_video_codec = config.app.get(
-                "video_codec", DEFAULT_VIDEO_CODEC_OPTION
-            )
-            saved_video_codec_values = [item[1] for item in video_codec_options]
-            if saved_video_codec not in saved_video_codec_values:
-                # 旧版本或手工配置可能留下无效值。UI 回到“默认”而不是替用户
-                # 固定某个编码器，后端仍会按稳定策略解析为 libx264。
-                saved_video_codec = DEFAULT_VIDEO_CODEC_OPTION
-            selected_video_codec = stable_selectbox(
-                tr("Video Encoder"),
-                options=saved_video_codec_values,
-                default_value=saved_video_codec,
-                key="video_encoder_select",
-                format_func=lambda value: dict(
-                    (v, label) for label, v in video_codec_options
-                )[value],
-                help=tr("Video Encoder Help"),
-            )
-            if selected_video_codec == DEFAULT_VIDEO_CODEC_OPTION:
-                # 默认模式不持久化具体编码器，让配置表达“跟随项目默认值”。
-                _delete_runtime_config("app", "video_codec")
-            else:
-                _set_runtime_config("app", "video_codec", selected_video_codec)
+                    video_codec_options = [
+                        (tr("Default Video Encoder"), DEFAULT_VIDEO_CODEC_OPTION),
+                        ("libx264 (CPU)", "libx264"),
+                        ("NVIDIA NVENC (h264_nvenc)", "h264_nvenc"),
+                        ("AMD AMF (h264_amf)", "h264_amf"),
+                        ("Intel QSV (h264_qsv)", "h264_qsv"),
+                        ("Windows MediaFoundation (h264_mf)", "h264_mf"),
+                        ("macOS VideoToolbox (h264_videotoolbox)", "h264_videotoolbox"),
+                    ]
+                    saved_video_codec = config.app.get(
+                        "video_codec", DEFAULT_VIDEO_CODEC_OPTION
+                    )
+                    saved_video_codec_values = [item[1] for item in video_codec_options]
+                    if saved_video_codec not in saved_video_codec_values:
+                        # 旧版本或手工配置可能留下无效值。UI 回到“默认”而不是替用户
+                        # 固定某个编码器，后端仍会按稳定策略解析为 libx264。
+                        saved_video_codec = DEFAULT_VIDEO_CODEC_OPTION
+                    selected_video_codec = stable_selectbox(
+                        tr("Video Encoder"),
+                        options=saved_video_codec_values,
+                        default_value=saved_video_codec,
+                        key="video_encoder_select",
+                        format_func=lambda value: dict(
+                            (v, label) for label, v in video_codec_options
+                        )[value],
+                        help=tr("Video Encoder Help"),
+                    )
+                    if selected_video_codec == DEFAULT_VIDEO_CODEC_OPTION:
+                        # 默认模式不持久化具体编码器，让配置表达“跟随项目默认值”。
+                        _delete_runtime_config("app", "video_codec")
+                    else:
+                        _set_runtime_config("app", "video_codec", selected_video_codec)
 
-            concurrency_options = [1, 2, 4, 6, 8]
-            if params.video_source in {"pexels", "pixabay", "coverr"}:
-                selected_material_concurrency = stable_selectbox(
-                    tr("Material Concurrency"),
-                    options=concurrency_options,
-                    default_value=_saved_ui_choice(
-                        "material_concurrency", concurrency_options, 1, config.app
-                    ),
-                    key="material_concurrency_select",
-                    help=tr("Material Concurrency Help"),
-                )
-                _set_runtime_config(
-                    "app", "material_concurrency", selected_material_concurrency
-                )
+                    concurrency_options = [1, 2, 4, 6, 8]
+                    if params.video_source in {"pexels", "pixabay", "coverr"}:
+                        selected_material_concurrency = stable_selectbox(
+                            tr("Material Concurrency"),
+                            options=concurrency_options,
+                            default_value=_saved_ui_choice(
+                                "material_concurrency", concurrency_options, 1, config.app
+                            ),
+                            key="material_concurrency_select",
+                            help=tr("Material Concurrency Help"),
+                        )
+                        _set_runtime_config(
+                            "app", "material_concurrency", selected_material_concurrency
+                        )
 
-            selected_clip_concurrency = stable_selectbox(
-                tr("Clip Rendering Concurrency"),
-                options=concurrency_options,
-                default_value=_saved_ui_choice(
-                    "video_clip_concurrency", concurrency_options, 1, config.app
-                ),
-                key="clip_rendering_concurrency_select",
-                help=tr("Clip Rendering Concurrency Help"),
-            )
-            _set_runtime_config(
-                "app", "video_clip_concurrency", selected_clip_concurrency
-            )
+                    selected_clip_concurrency = stable_selectbox(
+                        tr("Clip Rendering Concurrency"),
+                        options=concurrency_options,
+                        default_value=_saved_ui_choice(
+                            "video_clip_concurrency", concurrency_options, 1, config.app
+                        ),
+                        key="clip_rendering_concurrency_select",
+                        help=tr("Clip Rendering Concurrency Help"),
+                    )
+                    _set_runtime_config(
+                        "app", "video_clip_concurrency", selected_clip_concurrency
+                    )
 
             if params.video_source == "loomloom":
                 _render_loomloom_video_settings(params)
@@ -7968,7 +7971,7 @@ def _voice_rate_not_supported_help(tts_server, voice_name):
 def _render_audio_settings(panel, params):
     """渲染音频设置并返回上传音频与当前配音模式。"""
     with panel:
-        with st.container(border=True):
+        with st.container(border=True, key="step_card_voice"):
             st.write(tr("Audio Settings"))
 
             # 配音方式是音频设置的一级状态，负责明确区分自动配音、用户上传和无配音。
@@ -8691,7 +8694,7 @@ def _render_audio_settings(panel, params):
 def _render_subtitle_settings(panel, params):
     """渲染字幕设置并更新生成参数。"""
     with panel:
-        with st.container(border=True):
+        with st.container(border=True, key="step_card_subtitles"):
             st.write(tr("Subtitle Settings"))
             st.session_state.setdefault(
                 "subtitle_enabled_checkbox",
@@ -9529,12 +9532,26 @@ def _render_application():
     if restore_applied or restore_succeeded:
         st.success(tr("Task Configuration Loaded"))
 
+    # 按做一条带货视频的顺序分成 4 个步骤标签页。每个标签页都会渲染（Streamlit
+    # tabs 只是隐藏），所以参数收集逻辑与原四列布局完全相同。
     with st.container(key="main_settings_grid"):
-        panel = st.columns(4)
-    left_panel = panel[0]
-    middle_panel = panel[1]
-    audio_panel = panel[2]
-    right_panel = panel[3]
+        step_tabs = st.tabs(
+            [
+                tr("Step Script Tab"),
+                tr("Step Visuals Tab"),
+                tr("Step Voice Tab"),
+                tr("Step Subtitles Tab"),
+            ]
+        )
+    panels = []
+    for step_index, step_tab in enumerate(step_tabs, start=1):
+        with step_tab:
+            main_col, tip_col = st.columns([3, 2], gap="large")
+            with tip_col:
+                with st.container(key=f"step_tip_{step_index}"):
+                    st.markdown(tr(f"Step {step_index} Tip"))
+        panels.append(main_col)
+    left_panel, middle_panel, audio_panel, right_panel = panels
 
     params = VideoParams(video_subject="")
     params.match_materials_to_script = bool(

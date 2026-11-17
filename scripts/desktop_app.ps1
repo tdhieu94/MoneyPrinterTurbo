@@ -98,7 +98,9 @@ function Start-DesktopApp {
             "--browser.gatherUsageStats=False",
             "--client.toolbarMode=minimal",
             "--logger.hideWelcomeMessage=True",
-            "--server.showEmailPrompt=False"
+            "--server.showEmailPrompt=False",
+            "--theme.base=light",
+            "--theme.primaryColor=#ee4d2d"
         )
         $server = Start-Process -FilePath $python -ArgumentList $serverArgs -WorkingDirectory $Root `
             -WindowStyle Hidden -PassThru -RedirectStandardOutput $outLog -RedirectStandardError $errLog

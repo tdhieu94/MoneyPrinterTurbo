@@ -776,6 +776,11 @@
     "Provider Configuration Changed": "配置已更改，请检查该服务商的设置。",
     "VieNeu Python Path": "VieNeu Python 路径",
     "tts_provider_tips.vieneu": "本地离线越南语 TTS，免费且无需 API Key：填写已安装 `vieneu` 包的环境中的 python.exe 路径。首次运行需加载模型，可能需要几分钟。",
-    "Fit with Blurred Background": "完整显示，模糊背景"
+    "Fit with Blurred Background": "完整显示，模糊背景",
+    "Step Script Tab": "① 商品与文案",
+    "Step Visuals Tab": "② 画面素材",
+    "Step Voice Tab": "③ 配音与音乐",
+    "Step Subtitles Tab": "④ 字幕",
+    "Advanced Video Settings": "高级视频设置"
   }
 }
