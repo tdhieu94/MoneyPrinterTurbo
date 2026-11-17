@@ -501,3 +501,152 @@ div[class*="st-key-task_row_"] button[kind="secondary"] p {
         min-width: 1.75rem !important;
     }
 }
+
+/* ---------------------------------------------------------------------------
+   Shopee affiliate theme: warm orange accent, soft page background, white
+   step cards, pill-shaped step tabs and a sticky "Generate Video" button.
+   --------------------------------------------------------------------------- */
+:root {
+    --mpt-accent: #ee4d2d;
+    --mpt-accent-strong: #d73211;
+    --mpt-accent-soft: #fff1ec;
+    --mpt-page-bg: #f6f7f9;
+    --mpt-card-bg: #ffffff;
+    --mpt-card-border: #ebedf0;
+    --mpt-text-muted: #5f6368;
+}
+
+/* The desktop launcher pins Streamlit's light theme, so these colours are
+   not switched by the Windows dark/light setting (a dark page behind light
+   widgets would be unreadable). */
+
+div[data-testid="stApp"],
+div[data-testid="stAppViewContainer"] {
+    background: var(--mpt-page-bg) !important;
+}
+
+.mpt-brand__name {
+    color: var(--mpt-accent);
+}
+
+/* Step cards: the bordered container of each settings group. */
+div[class*="st-key-step_card_"] {
+    padding: 1.25rem 1.35rem !important;
+    border-color: var(--mpt-card-border) !important;
+    border-radius: 14px !important;
+    background: var(--mpt-card-bg) !important;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.06);
+}
+
+/* Step tabs as pills. */
+div[class*="st-key-main_settings_grid"] div[role="tablist"] {
+    gap: 0.5rem !important;
+    flex-wrap: wrap;
+    padding-bottom: 0.75rem;
+}
+
+div[class*="st-key-main_settings_grid"] [data-testid="stTab"] {
+    height: auto !important;
+    padding: 0.55rem 1.1rem !important;
+    border: 1px solid var(--mpt-card-border) !important;
+    border-radius: 999px !important;
+    background: var(--mpt-card-bg) !important;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+div[class*="st-key-main_settings_grid"] [data-testid="stTab"] p {
+    font-size: 0.95rem !important;
+    font-weight: 600 !important;
+}
+
+div[class*="st-key-main_settings_grid"] [data-testid="stTab"]:hover {
+    border-color: var(--mpt-accent) !important;
+}
+
+div[class*="st-key-main_settings_grid"] [data-testid="stTab"][aria-selected="true"] {
+    border-color: var(--mpt-accent) !important;
+    background: var(--mpt-accent) !important;
+}
+
+div[class*="st-key-main_settings_grid"] [data-testid="stTab"][aria-selected="true"] p {
+    color: #ffffff !important;
+}
+
+/* Tip panel beside each step. */
+div[class*="st-key-step_tip_"] {
+    padding: 1rem 1.15rem !important;
+    border-left: 4px solid var(--mpt-accent);
+    border-radius: 12px;
+    background: var(--mpt-accent-soft);
+}
+
+div[class*="st-key-step_tip_"] h4 {
+    margin: 0 0 0.35rem 0 !important;
+    padding: 0 !important;
+    font-size: 1rem !important;
+    color: var(--mpt-accent-strong);
+}
+
+div[class*="st-key-step_tip_"] li,
+div[class*="st-key-step_tip_"] p {
+    font-size: 0.9rem !important;
+    line-height: 1.5 !important;
+}
+
+/* Primary actions in the accent colour. */
+button[kind="primary"] {
+    border-color: var(--mpt-accent) !important;
+    background: var(--mpt-accent) !important;
+    color: #ffffff !important;
+}
+
+button[kind="primary"]:hover {
+    border-color: var(--mpt-accent-strong) !important;
+    background: var(--mpt-accent-strong) !important;
+}
+
+/* Keep "Generate Video" in reach while scrolling long settings. */
+div[class*="st-key-generate_video_button"] {
+    position: sticky;
+    bottom: 0.75rem;
+    z-index: 20;
+}
+
+div[class*="st-key-generate_video_button"] button {
+    min-height: 3.25rem !important;
+    border-radius: 12px !important;
+    box-shadow: 0 6px 18px rgba(238, 77, 45, 0.28);
+}
+
+div[class*="st-key-generate_video_button"] button p {
+    font-size: 1.1rem !important;
+    font-weight: 700 !important;
+}
+
+/* Inputs: a little rounder and calmer. */
+div[class*="st-key-main_settings_grid"] div[data-baseweb="select"] > div,
+div[class*="st-key-main_settings_grid"] div[data-baseweb="textarea"],
+div[class*="st-key-main_settings_grid"] div[data-baseweb="input"] {
+    border-radius: 10px !important;
+}
+
+div[class*="st-key-main_settings_grid"] section[data-testid="stFileUploaderDropzone"] {
+    border: 2px dashed var(--mpt-accent) !important;
+    border-radius: 12px !important;
+    background: var(--mpt-accent-soft) !important;
+}
+
+/* Streamlit's tab underline (tablist ::after) and the selection indicator
+   (empty div inside the tab) are replaced by the pill style above. */
+div[class*="st-key-main_settings_grid"] div[role="tablist"]::after {
+    display: none !important;
+}
+
+div[class*="st-key-main_settings_grid"] [data-testid="stTab"] > div:not([data-testid]) {
+    display: none !important;
+}
+
+/* Room under the last settings so the sticky button never hides them. */
+div[data-testid="stMainBlockContainer"] {
+    padding-bottom: 5rem !important;
+}

@@ -23,7 +23,7 @@ MATERIAL_VALIDATION_TIMEOUT_SECONDS = 120
 # render pipeline classifies (video.py reads const.FILE_TYPE_IMAGES). Accepting a
 # narrower set here rejects uploads the rest of the pipeline already supports.
 SUPPORTED_VIDEO_EXTENSIONS = (".mp4", ".mov", ".avi", ".flv", ".mkv", ".webm")
-SUPPORTED_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp")
+SUPPORTED_IMAGE_EXTENSIONS = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
 SUPPORTED_MATERIAL_EXTENSIONS = (
     *SUPPORTED_VIDEO_EXTENSIONS,
     *SUPPORTED_IMAGE_EXTENSIONS,
@@ -69,6 +69,9 @@ _IMAGE_FORMATS_BY_EXTENSION = {
     ".jpeg": frozenset({"JPEG", "MPO"}),
     ".png": frozenset({"PNG"}),
     ".bmp": frozenset({"BMP"}),
+    # The render pipeline cannot read WebP, so .webp uploads are never stored
+    # as-is: their WebP content is converted to PNG (see save_material_upload).
+    ".webp": frozenset(),
 }
 
 
@@ -77,7 +80,7 @@ class MaterialUploadError(ValueError):
 
 
 class _WebpImageUpload(MaterialUploadError):
-    """A .jpg/.jpeg/.png/.bmp upload whose content is actually WebP."""
+    """An image upload whose content is WebP and must be converted to PNG."""
 
 
 # Shopee, Lazada, TikTok Shop and most CDNs serve product photos as WebP even

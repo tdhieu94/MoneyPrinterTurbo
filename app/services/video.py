@@ -29,7 +29,7 @@ from moviepy import (
     afx,
 )
 from moviepy.video.tools.subtitles import SubtitlesClip
-from PIL import Image, ImageColor, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageColor, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 from app.config import config
 from app.models import const
@@ -913,6 +913,65 @@ def get_bgm_file(bgm_type: str = "random", bgm_file: str = ""):
     return ""
 
 
+_BLUR_BACKGROUND_DOWNSCALE = 12
+_BLUR_BACKGROUND_RADIUS = 2.5
+_BLUR_BACKGROUND_BRIGHTNESS = 0.6
+
+
+def _blurred_cover_frame(frame, target_width: int, target_height: int):
+    """Cover-crop one frame, blur it and dim it for use as a backdrop.
+
+    The blur runs on a small copy (1/12 of the canvas) and is scaled back up,
+    which is far cheaper per frame than blurring at full resolution and gives
+    the same soft look.
+    """
+    image = Image.fromarray(np.asarray(frame).astype("uint8")).convert("RGB")
+    source_width, source_height = image.size
+    small_width = max(1, target_width // _BLUR_BACKGROUND_DOWNSCALE)
+    small_height = max(1, target_height // _BLUR_BACKGROUND_DOWNSCALE)
+    scale = max(small_width / source_width, small_height / source_height)
+    cover_width = max(small_width, math.ceil(source_width * scale))
+    cover_height = max(small_height, math.ceil(source_height * scale))
+    small = image.resize((cover_width, cover_height), Image.BILINEAR)
+    left = (cover_width - small_width) // 2
+    top = (cover_height - small_height) // 2
+    small = small.crop((left, top, left + small_width, top + small_height))
+    small = small.filter(ImageFilter.GaussianBlur(_BLUR_BACKGROUND_RADIUS))
+    # Dim while the image is still small; upscaling a blurred image with
+    # bilinear filtering is visually identical to bicubic and much cheaper.
+    small = Image.eval(small, lambda value: int(value * _BLUR_BACKGROUND_BRIGHTNESS))
+    return np.asarray(small.resize((target_width, target_height), Image.BILINEAR))
+
+
+def _fit_clip_with_blurred_background(
+    clip,
+    *,
+    target_width: int,
+    target_height: int,
+    resized_width: int,
+    resized_height: int,
+):
+    """Show the complete source frame over a blurred, enlarged copy of itself.
+
+    This is the usual look for product shots in vertical short videos: nothing
+    of the product is cropped, and there are no black bars.
+    """
+    background = VideoClip(
+        lambda t: _blurred_cover_frame(
+            clip.get_frame(t), target_width, target_height
+        ),
+        duration=clip.duration,
+    )
+    foreground = clip.resized(
+        new_size=(resized_width, resized_height)
+    ).with_position("center")
+    return CompositeVideoClip(
+        [background, foreground],
+        size=(target_width, target_height),
+        bg_color=(0, 0, 0),
+    ).with_duration(clip.duration)
+
+
 def _fit_clip_to_canvas(
     clip,
     *,
@@ -963,6 +1022,14 @@ def _fit_clip_to_canvas(
     scale_factor = min(width_scale, height_scale)
     resized_width = max(1, min(target_width, int(source_width * scale_factor)))
     resized_height = max(1, min(target_height, int(source_height * scale_factor)))
+    if mode == VideoFitMode.blur:
+        return _fit_clip_with_blurred_background(
+            clip,
+            target_width=target_width,
+            target_height=target_height,
+            resized_width=resized_width,
+            resized_height=resized_height,
+        )
     background = ColorClip(
         size=(target_width, target_height), color=(0, 0, 0)
     ).with_duration(clip.duration)

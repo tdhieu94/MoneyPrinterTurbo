@@ -49,7 +49,7 @@
     "Video Script Settings": "**Cài Đặt Kịch Bản Video**",
     "Video Subject": "Chủ đề video",
     "Video Subject Help": "AI sẽ tạo kịch bản video dựa trên chủ đề này.",
-    "Video Subject Placeholder": "Ví dụ: AI đang thay đổi cuộc sống hằng ngày ra sao",
+    "Video Subject Placeholder": "Ví dụ: Khăn giấy Top Gia 10 gói, siêu mềm, giá chỉ 59k",
     "Script Language": "Ngôn ngữ kịch bản",
     "Advanced Script Settings": "Cài Đặt Kịch Bản Nâng Cao",
     "Script Paragraph Number": "Số Đoạn Kịch Bản",
@@ -136,7 +136,7 @@
     "Video Fit Mode": "Cách khớp khung hình nguồn",
     "Fill and Crop": "Lấp đầy (cắt giữa)",
     "Fit with Black Bars": "Vừa khung (viền đen)",
-    "Video Fit Mode Help": "Lấp đầy sử dụng toàn bộ khung đầu ra và cắt phần cạnh dư. Vừa khung giữ nguyên toàn bộ hình nguồn và thêm viền đen khi cần.",
+    "Video Fit Mode Help": "Lấp đầy sử dụng toàn bộ khung đầu ra và cắt phần cạnh dư. Vừa khung giữ nguyên toàn bộ hình nguồn và thêm viền đen khi cần. Nền mờ cũng giữ nguyên toàn bộ hình, phần trống được lấp bằng chính ảnh đó làm mờ (hợp với ảnh sản phẩm).",
     "Image Motion": "Chuyển động hình ảnh",
     "Static Image": "Tĩnh",
     "Slow Zoom": "Phóng to chậm",
@@ -512,6 +512,17 @@
     "Configure Providers": "Cấu hình",
     "Active Provider": "Đang sử dụng: {provider}",
     "No Configured Providers": "Chưa có nhà cung cấp nào được cấu hình.",
-    "Provider Configuration Changed": "Cấu hình đã thay đổi. Hãy kiểm tra cài đặt của nhà cung cấp này."
+    "Provider Configuration Changed": "Cấu hình đã thay đổi. Hãy kiểm tra cài đặt của nhà cung cấp này.",
+    "VieNeu Python Path": "Đường dẫn Python của VieNeu (python.exe)",
+    "Fit with Blurred Background": "Hiện đủ ảnh, nền mờ",
+    "Step Script Tab": "① Sản phẩm & kịch bản",
+    "Step Visuals Tab": "② Hình ảnh",
+    "Step Voice Tab": "③ Giọng đọc & nhạc",
+    "Step Subtitles Tab": "④ Phụ đề",
+    "Advanced Video Settings": "Cài đặt video nâng cao",
+    "Step 1 Tip": "#### Mẹo bước 1\n\n- **Chủ đề video**: ghi tên sản phẩm và điểm nổi bật, ví dụ *Khăn giấy Top Gia 10 gói, siêu mềm, giá 59k*.\n- Mở **Cài Đặt Kịch Bản Nâng Cao** để chọn mẫu kịch bản bán hàng.\n- Bấm **Tạo Kịch Bản & Từ Khóa Bằng AI**, rồi đọc lại và sửa giá, ưu đãi cho đúng.",
+    "Step 2 Tip": "#### Mẹo bước 2\n\n- **Nguồn Video**: chọn **Tệp cục bộ**, rồi kéo thả ảnh hoặc clip sản phẩm (jpg, png, webp, mp4).\n- **Cách khớp khung hình nguồn**: chọn **Hiện đủ ảnh, nền mờ** để ảnh không bị cắt.\n- **Chuyển động hình ảnh**: chọn **Tĩnh** để sản phẩm hiện rõ.\n- Nên trộn thêm vài clip quay thật: Shopee Video ưu tiên video thật hơn ảnh ghép.",
+    "Step 3 Tip": "#### Mẹo bước 3\n\n- **Dịch Vụ Giọng Nói**: chọn **VieNeu TTS (Tiếng Việt, offline)**, miễn phí và chạy ngay trên máy.\n- Giọng gợi ý: **Ngọc Lan** (nữ) hoặc **Gia Bảo** (nam).\n- Nghe thử trước khi tạo video. Cứ 40 giây giọng đọc mất khoảng 1 phút để tạo.",
+    "Step 4 Tip": "#### Mẹo bước 4\n\n- **Phông chữ**: chọn **BeVietnamPro-Bold** để hiện đúng dấu tiếng Việt.\n- Vị trí **Dưới cùng** dễ đọc nhất trên điện thoại.\n- Xong thì bấm **Tạo Video** ở cuối trang."
   }
 }

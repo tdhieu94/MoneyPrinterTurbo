@@ -255,6 +255,7 @@ _RUNTIME_CONFIG_SECTIONS = {
     "azure": config.azure,
     "chatterbox": config.chatterbox,
     "kokoro": config.kokoro,
+    "vieneu": config.vieneu,
     "elevenlabs": config.elevenlabs,
     "minimax_tts": config.minimax_tts,
     "siliconflow": config.siliconflow,
@@ -1519,6 +1520,8 @@ def _infer_tts_server_from_voice(voice_name):
         return "chatterbox"
     if voice.is_kokoro_voice(voice_name):
         return "kokoro"
+    if voice.is_vieneu_voice(voice_name):
+        return "vieneu"
     if voice.is_fish_audio_voice(voice_name):
         return "fish_audio"
     if voice.is_voxcpm_voice(voice_name):
@@ -5845,7 +5848,7 @@ def _render_loomloom_script_generation(params):
 def _render_script_settings(panel, params):
     """渲染文案设置并更新生成参数。"""
     with panel:
-        with st.container(border=True):
+        with st.container(border=True, key="step_card_script"):
             st.write(tr("Video Script Settings"))
             # 标签行需要容纳“配置大模型”入口，因此无法继续使用 text_area
             # 内置标签。把标签和输入框收进同一个字段容器后，可覆盖内部间距，
@@ -6058,7 +6061,7 @@ def _render_video_settings(panel, params):
     """渲染视频设置并返回本次选择的本地素材。"""
     uploaded_files = []
     with panel:
-        with st.container(border=True):
+        with st.container(border=True, key="step_card_visuals"):
             st.write(tr("Video Settings"))
             video_concat_modes = [
                 (tr("Sequential"), "sequential"),
@@ -6251,6 +6254,7 @@ def _render_video_settings(panel, params):
             video_fit_modes = [
                 (tr("Fill and Crop"), VideoFitMode.cover.value),
                 (tr("Fit with Black Bars"), VideoFitMode.contain.value),
+                (tr("Fit with Blurred Background"), VideoFitMode.blur.value),
             ]
             selected_fit_mode = stable_selectbox(
                 tr("Video Fit Mode"),
@@ -6330,97 +6334,100 @@ def _render_video_settings(panel, params):
             _set_runtime_config(
                 "ui", "video_clip_duration", params.video_clip_duration
             )
-            clip_speed_key = localized_widget_key("video_clip_speed_slider")
-            # session_state 可能来自旧任务、API 参数或旧版页面状态。控件创建前
-            # 统一归一化，既保留合法选择，也确保 slider 始终收到 0.5～2.0
-            # 范围内的有限浮点数。
-            st.session_state[clip_speed_key] = utils.normalize_clip_speed(
-                st.session_state.get(
-                    clip_speed_key,
-                    _saved_ui_number("video_clip_speed", 1.0, 0.5, 2.0),
-                )
-            )
-            params.video_clip_speed = st.slider(
-                tr("Clip Speed"),
-                min_value=0.5,
-                max_value=2.0,
-                step=0.05,
-                format="%.2fx",
-                key=clip_speed_key,
-                help=tr("Clip Speed Help"),
-            )
-            _set_runtime_config("ui", "video_clip_speed", params.video_clip_speed)
-            video_count_options = [1, 2, 3, 4, 5]
-            params.video_count = stable_selectbox(
-                tr("Number of Videos Generated Simultaneously"),
-                options=video_count_options,
-                default_value=_saved_ui_choice(
-                    "video_count", video_count_options, 1
-                ),
-                key="video_count_select",
-            )
-            _set_runtime_config("ui", "video_count", params.video_count)
+            # 少用的性能/编码参数收进“高级视频设置”，主界面只留做商品视频需要的选项。
+            with st.container(key="advanced_settings_video"):
+                with st.expander(tr("Advanced Video Settings"), expanded=False):
+                    clip_speed_key = localized_widget_key("video_clip_speed_slider")
+                    # session_state 可能来自旧任务、API 参数或旧版页面状态。控件创建前
+                    # 统一归一化，既保留合法选择，也确保 slider 始终收到 0.5～2.0
+                    # 范围内的有限浮点数。
+                    st.session_state[clip_speed_key] = utils.normalize_clip_speed(
+                        st.session_state.get(
+                            clip_speed_key,
+                            _saved_ui_number("video_clip_speed", 1.0, 0.5, 2.0),
+                        )
+                    )
+                    params.video_clip_speed = st.slider(
+                        tr("Clip Speed"),
+                        min_value=0.5,
+                        max_value=2.0,
+                        step=0.05,
+                        format="%.2fx",
+                        key=clip_speed_key,
+                        help=tr("Clip Speed Help"),
+                    )
+                    _set_runtime_config("ui", "video_clip_speed", params.video_clip_speed)
+                    video_count_options = [1, 2, 3, 4, 5]
+                    params.video_count = stable_selectbox(
+                        tr("Number of Videos Generated Simultaneously"),
+                        options=video_count_options,
+                        default_value=_saved_ui_choice(
+                            "video_count", video_count_options, 1
+                        ),
+                        key="video_count_select",
+                    )
+                    _set_runtime_config("ui", "video_count", params.video_count)
 
-            video_codec_options = [
-                (tr("Default Video Encoder"), DEFAULT_VIDEO_CODEC_OPTION),
-                ("libx264 (CPU)", "libx264"),
-                ("NVIDIA NVENC (h264_nvenc)", "h264_nvenc"),
-                ("AMD AMF (h264_amf)", "h264_amf"),
-                ("Intel QSV (h264_qsv)", "h264_qsv"),
-                ("Windows MediaFoundation (h264_mf)", "h264_mf"),
-                ("macOS VideoToolbox (h264_videotoolbox)", "h264_videotoolbox"),
-            ]
-            saved_video_codec = config.app.get(
-                "video_codec", DEFAULT_VIDEO_CODEC_OPTION
-            )
-            saved_video_codec_values = [item[1] for item in video_codec_options]
-            if saved_video_codec not in saved_video_codec_values:
-                # 旧版本或手工配置可能留下无效值。UI 回到“默认”而不是替用户
-                # 固定某个编码器，后端仍会按稳定策略解析为 libx264。
-                saved_video_codec = DEFAULT_VIDEO_CODEC_OPTION
-            selected_video_codec = stable_selectbox(
-                tr("Video Encoder"),
-                options=saved_video_codec_values,
-                default_value=saved_video_codec,
-                key="video_encoder_select",
-                format_func=lambda value: dict(
-                    (v, label) for label, v in video_codec_options
-                )[value],
-                help=tr("Video Encoder Help"),
-            )
-            if selected_video_codec == DEFAULT_VIDEO_CODEC_OPTION:
-                # 默认模式不持久化具体编码器，让配置表达“跟随项目默认值”。
-                _delete_runtime_config("app", "video_codec")
-            else:
-                _set_runtime_config("app", "video_codec", selected_video_codec)
+                    video_codec_options = [
+                        (tr("Default Video Encoder"), DEFAULT_VIDEO_CODEC_OPTION),
+                        ("libx264 (CPU)", "libx264"),
+                        ("NVIDIA NVENC (h264_nvenc)", "h264_nvenc"),
+                        ("AMD AMF (h264_amf)", "h264_amf"),
+                        ("Intel QSV (h264_qsv)", "h264_qsv"),
+                        ("Windows MediaFoundation (h264_mf)", "h264_mf"),
+                        ("macOS VideoToolbox (h264_videotoolbox)", "h264_videotoolbox"),
+                    ]
+                    saved_video_codec = config.app.get(
+                        "video_codec", DEFAULT_VIDEO_CODEC_OPTION
+                    )
+                    saved_video_codec_values = [item[1] for item in video_codec_options]
+                    if saved_video_codec not in saved_video_codec_values:
+                        # 旧版本或手工配置可能留下无效值。UI 回到“默认”而不是替用户
+                        # 固定某个编码器，后端仍会按稳定策略解析为 libx264。
+                        saved_video_codec = DEFAULT_VIDEO_CODEC_OPTION
+                    selected_video_codec = stable_selectbox(
+                        tr("Video Encoder"),
+                        options=saved_video_codec_values,
+                        default_value=saved_video_codec,
+                        key="video_encoder_select",
+                        format_func=lambda value: dict(
+                            (v, label) for label, v in video_codec_options
+                        )[value],
+                        help=tr("Video Encoder Help"),
+                    )
+                    if selected_video_codec == DEFAULT_VIDEO_CODEC_OPTION:
+                        # 默认模式不持久化具体编码器，让配置表达“跟随项目默认值”。
+                        _delete_runtime_config("app", "video_codec")
+                    else:
+                        _set_runtime_config("app", "video_codec", selected_video_codec)
 
-            concurrency_options = [1, 2, 4, 6, 8]
-            if params.video_source in {"pexels", "pixabay", "coverr"}:
-                selected_material_concurrency = stable_selectbox(
-                    tr("Material Concurrency"),
-                    options=concurrency_options,
-                    default_value=_saved_ui_choice(
-                        "material_concurrency", concurrency_options, 1, config.app
-                    ),
-                    key="material_concurrency_select",
-                    help=tr("Material Concurrency Help"),
-                )
-                _set_runtime_config(
-                    "app", "material_concurrency", selected_material_concurrency
-                )
+                    concurrency_options = [1, 2, 4, 6, 8]
+                    if params.video_source in {"pexels", "pixabay", "coverr"}:
+                        selected_material_concurrency = stable_selectbox(
+                            tr("Material Concurrency"),
+                            options=concurrency_options,
+                            default_value=_saved_ui_choice(
+                                "material_concurrency", concurrency_options, 1, config.app
+                            ),
+                            key="material_concurrency_select",
+                            help=tr("Material Concurrency Help"),
+                        )
+                        _set_runtime_config(
+                            "app", "material_concurrency", selected_material_concurrency
+                        )
 
-            selected_clip_concurrency = stable_selectbox(
-                tr("Clip Rendering Concurrency"),
-                options=concurrency_options,
-                default_value=_saved_ui_choice(
-                    "video_clip_concurrency", concurrency_options, 1, config.app
-                ),
-                key="clip_rendering_concurrency_select",
-                help=tr("Clip Rendering Concurrency Help"),
-            )
-            _set_runtime_config(
-                "app", "video_clip_concurrency", selected_clip_concurrency
-            )
+                    selected_clip_concurrency = stable_selectbox(
+                        tr("Clip Rendering Concurrency"),
+                        options=concurrency_options,
+                        default_value=_saved_ui_choice(
+                            "video_clip_concurrency", concurrency_options, 1, config.app
+                        ),
+                        key="clip_rendering_concurrency_select",
+                        help=tr("Clip Rendering Concurrency Help"),
+                    )
+                    _set_runtime_config(
+                        "app", "video_clip_concurrency", selected_clip_concurrency
+                    )
 
             if params.video_source == "loomloom":
                 _render_loomloom_video_settings(params)
@@ -7087,6 +7094,8 @@ def _get_voice_preview_provider_signature(tts_server: str) -> dict:
             "model_id": config.kokoro.get("model_id", ""),
             "credential": _credential_signature(config.kokoro.get("api_key", "")),
         }
+    if tts_server == "vieneu":
+        return {"python_path": config.vieneu.get("python_path", "")}
     if tts_server == "voxcpm":
         return {
             "base_url": config.voxcpm.get("base_url", ""),
@@ -7962,7 +7971,7 @@ def _voice_rate_not_supported_help(tts_server, voice_name):
 def _render_audio_settings(panel, params):
     """渲染音频设置并返回上传音频与当前配音模式。"""
     with panel:
-        with st.container(border=True):
+        with st.container(border=True, key="step_card_voice"):
             st.write(tr("Audio Settings"))
 
             # 配音方式是音频设置的一级状态，负责明确区分自动配音、用户上传和无配音。
@@ -8008,6 +8017,7 @@ def _render_audio_settings(panel, params):
                 ("elevenlabs", "ElevenLabs TTS"),
                 ("chatterbox", "Chatterbox TTS"),
                 ("kokoro", "Kokoro TTS"),
+                ("vieneu", "VieNeu TTS (Tiếng Việt, offline)"),
                 ("fish_audio", "Fish Audio TTS"),
                 ("voxcpm", "VoxCPM TTS"),
             ]
@@ -8083,6 +8093,8 @@ def _render_audio_settings(panel, params):
                 # 自托管 Kokoro 服务的音色：[kokoro] voices 为空时从服务端 /audio/voices 读取
                 _sync_kokoro_config_from_session_state()
                 filtered_voices = _get_kokoro_voice_options(saved_voice_name)
+            elif selected_tts_server == "vieneu":
+                filtered_voices = voice.get_vieneu_voices()
             elif selected_tts_server == "fish_audio":
                 filtered_voices = voice.get_fish_audio_voices()
             elif selected_tts_server == "voxcpm":
@@ -8108,7 +8120,11 @@ def _render_audio_settings(panel, params):
                 if voice.is_elevenlabs_voice(v):
                     parts = v.split(":", 2)
                     return parts[2] if len(parts) >= 3 else v
-                if voice.is_chatterbox_voice(v) or voice.is_kokoro_voice(v):
+                if (
+                    voice.is_chatterbox_voice(v)
+                    or voice.is_kokoro_voice(v)
+                    or voice.is_vieneu_voice(v)
+                ):
                     name = v.split(":", 1)[1] if ":" in v else v
                     return name.replace("-Female", "").replace("-Male", "")
                 if voice.is_minimax_voice(v):
@@ -8571,6 +8587,23 @@ def _render_audio_settings(panel, params):
                     _parse_chatterbox_voices(kokoro_voices),
                 )
 
+            # VieNeu: local offline Vietnamese TTS run through its own Python env.
+            if tts_mode_enabled and (
+                selected_tts_server == "vieneu"
+                or (voice_name and voice.is_vieneu_voice(voice_name))
+            ):
+                vieneu_python_path = st.text_input(
+                    tr("VieNeu Python Path"),
+                    value=config.vieneu.get("python_path", ""),
+                    key="vieneu_python_path_input",
+                    placeholder=r"E:\text-to-video\venv\Scripts\python.exe",
+                )
+                _set_runtime_config(
+                    "vieneu",
+                    "python_path",
+                    (vieneu_python_path or "").strip().strip('"'),
+                )
+
             # 三种模式只渲染当前任务真正需要的控件。自动配音可调音量和语速；
             # 上传音频只需要文件和音量；无配音不再展示无效设置。
             params.voice_name = (
@@ -8661,7 +8694,7 @@ def _render_audio_settings(panel, params):
 def _render_subtitle_settings(panel, params):
     """渲染字幕设置并更新生成参数。"""
     with panel:
-        with st.container(border=True):
+        with st.container(border=True, key="step_card_subtitles"):
             st.write(tr("Subtitle Settings"))
             st.session_state.setdefault(
                 "subtitle_enabled_checkbox",
@@ -9499,12 +9532,26 @@ def _render_application():
     if restore_applied or restore_succeeded:
         st.success(tr("Task Configuration Loaded"))
 
+    # 按做一条带货视频的顺序分成 4 个步骤标签页。每个标签页都会渲染（Streamlit
+    # tabs 只是隐藏），所以参数收集逻辑与原四列布局完全相同。
     with st.container(key="main_settings_grid"):
-        panel = st.columns(4)
-    left_panel = panel[0]
-    middle_panel = panel[1]
-    audio_panel = panel[2]
-    right_panel = panel[3]
+        step_tabs = st.tabs(
+            [
+                tr("Step Script Tab"),
+                tr("Step Visuals Tab"),
+                tr("Step Voice Tab"),
+                tr("Step Subtitles Tab"),
+            ]
+        )
+    panels = []
+    for step_index, step_tab in enumerate(step_tabs, start=1):
+        with step_tab:
+            main_col, tip_col = st.columns([3, 2], gap="large")
+            with tip_col:
+                with st.container(key=f"step_tip_{step_index}"):
+                    st.markdown(tr(f"Step {step_index} Tip"))
+        panels.append(main_col)
+    left_panel, middle_panel, audio_panel, right_panel = panels
 
     params = VideoParams(video_subject="")
     params.match_materials_to_script = bool(
