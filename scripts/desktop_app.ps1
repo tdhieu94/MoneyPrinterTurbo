@@ -39,6 +39,30 @@ function Test-Port([int]$Port) {
     }
 }
 
+function Find-RunningServer {
+    # A WebUI started some other way (webui.bat, a terminal) already serves the
+    # app. Reuse it instead of starting a second server on the next port.
+    try {
+        $listeners = Get-NetTCPConnection -State Listen -ErrorAction Stop |
+            Where-Object { $_.LocalPort -ge 8501 -and $_.LocalPort -le 8599 } |
+            Sort-Object LocalPort
+    } catch {
+        return $null
+    }
+    foreach ($listener in $listeners) {
+        try {
+            $process = Get-CimInstance Win32_Process -Filter "ProcessId = $($listener.OwningProcess)" -ErrorAction Stop
+        } catch {
+            continue
+        }
+        $commandLine = [string]$process.CommandLine
+        if ($commandLine -match "streamlit" -and $commandLine -match "webui[\\/]Main\.py") {
+            return [int]$listener.LocalPort
+        }
+    }
+    return $null
+}
+
 function Find-AppBrowser {
     $candidates = @(
         "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",
@@ -76,44 +100,48 @@ function Start-DesktopApp {
             return
         }
 
-        $port = Find-FreePort
-        if ($null -eq $port) {
-            Show-Message "No free port found between 8501 and 8599."
-            return
-        }
-
         $dataDir = Join-Path $env:LOCALAPPDATA "MoneyPrinterTurboDesktop"
         New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
         $outLog = Join-Path $dataDir "server.out.log"
         $errLog = Join-Path $dataDir "server.err.log"
 
-        $env:PYTHONPATH = $Root
-        $env:PYTHONUTF8 = "1"
-        $serverArgs = @(
-            "-m", "streamlit", "run", "webui\Main.py",
-            "--server.address=127.0.0.1",
-            "--server.port=$port",
-            "--server.headless=true",
-            "--browser.serverAddress=127.0.0.1",
-            "--browser.gatherUsageStats=False",
-            "--client.toolbarMode=minimal",
-            "--logger.hideWelcomeMessage=True",
-            "--server.showEmailPrompt=False",
-            "--theme.base=light",
-            "--theme.primaryColor=#ee4d2d"
-        )
-        $server = Start-Process -FilePath $python -ArgumentList $serverArgs -WorkingDirectory $Root `
-            -WindowStyle Hidden -PassThru -RedirectStandardOutput $outLog -RedirectStandardError $errLog
+        # Only a server this script starts is stopped when the window closes.
+        $port = Find-RunningServer
+        if ($null -eq $port) {
+            $port = Find-FreePort
+            if ($null -eq $port) {
+                Show-Message "No free port found between 8501 and 8599."
+                return
+            }
 
-        $ready = $false
-        foreach ($attempt in 1..120) {
-            if ($server.HasExited) { break }
-            if (Test-Port $port) { $ready = $true; break }
-            Start-Sleep -Milliseconds 500
-        }
-        if (-not $ready) {
-            Show-Message "The app did not start. See the log files in: $dataDir"
-            return
+            $env:PYTHONPATH = $Root
+            $env:PYTHONUTF8 = "1"
+            $serverArgs = @(
+                "-m", "streamlit", "run", "webui\Main.py",
+                "--server.address=127.0.0.1",
+                "--server.port=$port",
+                "--server.headless=true",
+                "--browser.serverAddress=127.0.0.1",
+                "--browser.gatherUsageStats=False",
+                "--client.toolbarMode=minimal",
+                "--logger.hideWelcomeMessage=True",
+                "--server.showEmailPrompt=False",
+                "--theme.base=light",
+                "--theme.primaryColor=#ee4d2d"
+            )
+            $server = Start-Process -FilePath $python -ArgumentList $serverArgs -WorkingDirectory $Root `
+                -WindowStyle Hidden -PassThru -RedirectStandardOutput $outLog -RedirectStandardError $errLog
+
+            $ready = $false
+            foreach ($attempt in 1..120) {
+                if ($server.HasExited) { break }
+                if (Test-Port $port) { $ready = $true; break }
+                Start-Sleep -Milliseconds 500
+            }
+            if (-not $ready) {
+                Show-Message "The app did not start. See the log files in: $dataDir"
+                return
+            }
         }
 
         $url = "http://127.0.0.1:$port"

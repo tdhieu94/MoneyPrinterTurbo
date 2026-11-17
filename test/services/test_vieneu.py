@@ -13,6 +13,13 @@ FAKE_VIENEU = textwrap.dedent(
     import json, math, os, struct, wave
 
     class Vieneu:
+        def __init__(self):
+            loads = os.environ.get("FAKE_VIENEU_LOADS")
+            if loads:
+                with open(loads, "a", encoding="utf-8") as f:
+                    f.write("load\\n")
+            print("loading model... (noise on stdout)")
+
         def infer(self, text, voice=None):
             log = os.environ.get("FAKE_VIENEU_LOG")
             if log:
@@ -42,7 +49,9 @@ def fake_vieneu(tmp_path, monkeypatch):
     monkeypatch.setenv("FAKE_VIENEU_LOG", str(log))
     settings = {"python_path": sys.executable, "timeout_seconds": 120}
     monkeypatch.setattr(config, "vieneu", settings)
-    return settings, log
+    voice._vieneu_server.stop()
+    yield settings, log
+    voice._vieneu_server.stop()
 
 
 def test_voice_list_and_routing():
@@ -79,3 +88,27 @@ def test_missing_python_path(monkeypatch, tmp_path):
     assert voice.vieneu_tts("Xin chào", "Ngọc Lan", str(tmp_path / "a.mp3")) is None
     monkeypatch.setattr(config, "vieneu", {"python_path": str(tmp_path / "nope.exe")})
     assert voice.vieneu_tts("Xin chào", "Ngọc Lan", str(tmp_path / "a.mp3")) is None
+
+
+def test_model_is_loaded_once_for_several_voiceovers(fake_vieneu, tmp_path, monkeypatch):
+    loads = tmp_path / "loads.txt"
+    monkeypatch.setenv("FAKE_VIENEU_LOADS", str(loads))
+    for index in range(3):
+        output = tmp_path / f"audio-{index}.mp3"
+        assert voice.vieneu_tts("Xin chào các bạn.", "Ngọc Lan", str(output))
+        assert output.exists()
+    assert loads.read_text(encoding="utf-8").count("load") == 1
+    # A failed sentence must not kill the loaded model for the next one.
+    assert voice.vieneu_tts("fail please", "Ngọc Lan", str(tmp_path / "x.mp3")) is None
+    assert voice.vieneu_tts("Lần nữa.", "Ngọc Lan", str(tmp_path / "y.mp3"))
+    assert loads.read_text(encoding="utf-8").count("load") == 1
+
+
+def test_one_shot_mode_when_keep_loaded_is_off(fake_vieneu, tmp_path, monkeypatch):
+    settings, _ = fake_vieneu
+    settings["keep_loaded"] = False
+    loads = tmp_path / "loads.txt"
+    monkeypatch.setenv("FAKE_VIENEU_LOADS", str(loads))
+    for index in range(2):
+        assert voice.vieneu_tts("Xin chào.", "Ngọc Lan", str(tmp_path / f"{index}.mp3"))
+    assert loads.read_text(encoding="utf-8").count("load") == 2

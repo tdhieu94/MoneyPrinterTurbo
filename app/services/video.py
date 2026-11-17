@@ -42,6 +42,7 @@ from app.models.schema import (
     VideoParams,
     VideoTransitionMode,
 )
+from app.services import sales_overlay
 from app.services import bgm as bgm_service
 from app.services.utils import subtitle_shaping, video_effects
 from app.utils import file_security, logging_utils, utils
@@ -2007,6 +2008,16 @@ def generate_video(
             )
             clip_stack.callback(video_clip.close)
 
+        if sales_overlay.has_overlays(params):
+            overlay_clips = sales_overlay.build_overlay_clips(
+                params, video_width, video_height, video_clip.duration
+            )
+            if overlay_clips:
+                video_clip = CompositeVideoClip(
+                    [video_clip, *overlay_clips], bg_color=(0, 0, 0)
+                )
+                clip_stack.callback(video_clip.close)
+
         bgm_enabled = bgm_service.should_use_bgm(
             params.bgm_type, params.bgm_volume
         )
@@ -2127,6 +2138,49 @@ def _smooth_zoom_clip(clip, zoom_amount: float):
     return zoomed.with_position("center")
 
 
+# Gentle zoom: total growth over the clip, capped so long clips stay calm.
+_GENTLE_ZOOM_PER_SECOND = 0.025
+_GENTLE_ZOOM_MAX = 0.12
+
+
+def _gentle_zoom_clip(clip, zoom_amount: float):
+    """Slowly grow the photo up to its full size without cropping any of it.
+
+    ``_smooth_zoom_clip`` enlarges past the frame and cuts the edges, which can
+    hide part of a product (a price tag, a logo). Here the photo starts at
+    ``1 / (1 + zoom_amount)`` of its size over a blurred copy of itself and ends
+    at exactly 100%, so every pixel of the product stays visible throughout.
+    """
+    base = Image.fromarray(np.asarray(clip.get_frame(0)).astype("uint8")).convert("RGBA")
+    if clip.mask is not None:
+        mask_frame = np.asarray(clip.mask.get_frame(0)) * 255
+        base.putalpha(Image.fromarray(mask_frame.clip(0, 255).astype("uint8")))
+    width, height = base.size
+    backdrop = Image.fromarray(
+        _blurred_cover_frame(np.asarray(base.convert("RGB")), width, height)
+    ).convert("RGBA")
+    center_x, center_y = width / 2.0, height / 2.0
+    duration = clip.duration or 1.0
+    start_scale = 1.0 / (1.0 + max(0.0, zoom_amount))
+
+    def frame(t):
+        progress = min(max(t, 0.0), duration) / duration
+        # Ease out so the motion settles instead of stopping abruptly.
+        eased = 1.0 - (1.0 - progress) ** 2
+        scale = start_scale + (1.0 - start_scale) * eased
+        coefficients = (
+            1 / scale, 0, center_x - center_x / scale,
+            0, 1 / scale, center_y - center_y / scale,
+        )
+        layer = base.transform(
+            (width, height), Image.AFFINE, coefficients,
+            resample=Image.BICUBIC, fillcolor=(0, 0, 0, 0),
+        )
+        return np.asarray(Image.alpha_composite(backdrop, layer).convert("RGB"))
+
+    return VideoClip(frame, duration=clip.duration).with_position("center")
+
+
 def render_image_zoom_video(
     image_path: str, clip_duration: int = 5, image_motion: ImageMotion = ImageMotion.zoom
 ) -> str:
@@ -2143,11 +2197,15 @@ def render_image_zoom_video(
     temp_path = ""
     try:
         # 放大模式以亚像素精度逐帧放大，静止模式保留原始构图及透明背景处理。
-        image_clip = (
-            _smooth_zoom_clip(clip, clip_duration * 0.03)
-            if motion == ImageMotion.zoom
-            else clip
-        )
+        if motion == ImageMotion.zoom:
+            image_clip = _smooth_zoom_clip(clip, clip_duration * 0.03)
+        elif motion == ImageMotion.gentle:
+            image_clip = _gentle_zoom_clip(
+                clip,
+                min(_GENTLE_ZOOM_MAX, clip_duration * _GENTLE_ZOOM_PER_SECOND),
+            )
+        else:
+            image_clip = clip
 
         # Optionally, create a composite video clip containing the zoomed clip.
         # This is useful if you want to add other elements to the video.

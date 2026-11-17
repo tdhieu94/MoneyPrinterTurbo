@@ -2230,3 +2230,28 @@ class TestMaterialResolutionTolerance(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_gentle_zoom_keeps_the_whole_photo_visible():
+    import numpy as np
+    from moviepy import ImageClip
+
+    from app.services import video as video_service
+
+    frame = np.zeros((200, 100, 3), dtype="uint8")
+    frame[:, :] = (200, 30, 30)
+    frame[:10, :] = (0, 0, 255)  # a thin blue strip at the very top edge
+    clip = ImageClip(frame).with_duration(4)
+    gentle = video_service._gentle_zoom_clip(clip, 0.1)
+
+    start = gentle.get_frame(0)
+    end = gentle.get_frame(4)
+    assert start.shape == end.shape == frame.shape
+    # At the end the photo is shown at exactly 100%, edges included.
+    assert abs(int(end[2, 50, 2]) - 255) < 40
+    assert abs(int(end[100, 50, 0]) - 200) < 10
+    # At the start the photo is smaller: the top edge strip is pulled inward
+    # (not cut off) and the margin is a blurred backdrop, not black.
+    blue_rows = [y for y in range(40) if start[y, 50, 2] > 150]
+    assert blue_rows and min(blue_rows) > 0
+    assert start[0, 0].sum() > 0

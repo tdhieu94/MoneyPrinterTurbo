@@ -1,5 +1,7 @@
 import asyncio
+import atexit
 import base64
+import collections
 import io
 import inspect
 import itertools
@@ -2996,6 +2998,190 @@ def _vieneu_timeout_seconds() -> float:
     return timeout
 
 
+def _vieneu_env() -> dict:
+    env = dict(os.environ)
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    return env
+
+
+def _vieneu_keep_loaded() -> bool:
+    value = config.vieneu.get("keep_loaded", True)
+    if isinstance(value, str):
+        return value.strip().lower() not in {"0", "false", "no", "off"}
+    return bool(value)
+
+
+def _vieneu_idle_seconds() -> float:
+    raw = config.vieneu.get("idle_minutes", 30)
+    try:
+        minutes = float(raw)
+    except (TypeError, ValueError):
+        minutes = 30.0
+    if not math.isfinite(minutes) or minutes <= 0:
+        minutes = 30.0
+    return minutes * 60.0
+
+
+class _VieneuServer:
+    """One long-lived VieNeu worker so the model is loaded only once.
+
+    Loading the VieNeu model is most of the time spent per voiceover on CPU.
+    The worker keeps it in memory and is stopped after ``idle_minutes``
+    without requests (to give the RAM back) or when the app exits.
+    """
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._process = None
+        self._key = None
+        self._replies = None
+        self._stderr_tail = collections.deque(maxlen=40)
+        self._idle_timer = None
+
+    def _start(self, python_path: str, worker: str):
+        process = subprocess.Popen(
+            [python_path, worker, "--serve"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=_vieneu_env(),
+        )
+        replies = queue.Queue()
+        tail = collections.deque(maxlen=40)
+
+        def read_stdout():
+            for raw in process.stdout:
+                replies.put(raw)
+            replies.put(None)
+
+        def read_stderr():
+            # Always drain stderr: a full pipe would block the worker.
+            for raw in process.stderr:
+                tail.append(raw.decode("utf-8", errors="replace").rstrip())
+
+        threading.Thread(target=read_stdout, daemon=True).start()
+        threading.Thread(target=read_stderr, daemon=True).start()
+        self._process = process
+        self._key = (python_path, worker)
+        self._replies = replies
+        self._stderr_tail = tail
+
+    def _read_reply(self, deadline: float):
+        remaining = max(0.0, deadline - time.monotonic())
+        try:
+            raw = self._replies.get(timeout=remaining)
+        except queue.Empty:
+            return None, "timed out"
+        if raw is None:
+            return None, "worker exited"
+        try:
+            return json.loads(raw.decode("utf-8", errors="replace")), ""
+        except ValueError:
+            return None, "invalid reply from worker"
+
+    def _stop_locked(self):
+        if self._idle_timer is not None:
+            self._idle_timer.cancel()
+            self._idle_timer = None
+        process, self._process = self._process, None
+        if process is None:
+            return
+        try:
+            process.stdin.close()
+        except OSError:
+            pass
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+
+    def stop(self):
+        with self._lock:
+            self._stop_locked()
+
+    def _stop_if_idle(self, timer):
+        with self._lock:
+            if self._idle_timer is timer:
+                logger.info("stop idle vieneu worker to free memory")
+                self._idle_timer = None
+                self._stop_locked()
+
+    def _failure(self, reason: str) -> str:
+        details = "\n".join(self._stderr_tail)[-800:]
+        self._stop_locked()
+        return f"{reason}: {details}" if details else reason
+
+    def request(self, python_path: str, worker: str, payload: dict, timeout: float) -> str:
+        with self._lock:
+            if self._idle_timer is not None:
+                self._idle_timer.cancel()
+                self._idle_timer = None
+            deadline = time.monotonic() + timeout
+            if (
+                self._process is None
+                or self._process.poll() is not None
+                or self._key != (python_path, worker)
+            ):
+                self._stop_locked()
+                logger.info("load vieneu model (kept in memory for later voiceovers)")
+                self._start(python_path, worker)
+                ready, error = self._read_reply(deadline)
+                if not ready or not ready.get("ok"):
+                    reason = (ready or {}).get("error") or error or "failed to load"
+                    return self._failure(f"VieNeu worker did not start ({reason})")
+            try:
+                line = json.dumps(payload, ensure_ascii=False) + "\n"
+                self._process.stdin.write(line.encode("utf-8"))
+                self._process.stdin.flush()
+            except OSError as exc:
+                return self._failure(f"VieNeu worker closed ({exc})")
+            reply, error = self._read_reply(deadline)
+            if reply is None:
+                # A stuck or crashed worker cannot be reused safely.
+                return self._failure(f"VieNeu worker {error} after {timeout:g}s"
+                                     if error == "timed out" else f"VieNeu worker {error}")
+            if not reply.get("ok"):
+                return str(reply.get("error") or "synthesis failed")
+            timer = threading.Timer(_vieneu_idle_seconds(), lambda: None)
+            timer.function = lambda: self._stop_if_idle(timer)
+            timer.daemon = True
+            self._idle_timer = timer
+            timer.start()
+            return ""
+
+
+_vieneu_server = _VieneuServer()
+atexit.register(_vieneu_server.stop)
+
+
+def _run_vieneu_request(python_path: str, worker: str, payload: dict, timeout: float) -> str:
+    """Synthesize one WAV; return an error message, or "" on success."""
+    if _vieneu_keep_loaded():
+        return _vieneu_server.request(python_path, worker, payload, timeout)
+    try:
+        result = subprocess.run(
+            [python_path, worker],
+            input=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            capture_output=True,
+            check=False,
+            timeout=timeout,
+            env=_vieneu_env(),
+        )
+    except subprocess.TimeoutExpired:
+        return f"timed out after {timeout:g} seconds"
+    except OSError as exc:
+        return f"failed to start: {exc}"
+    if result.returncode != 0:
+        stderr = (result.stderr or b"").decode("utf-8", errors="replace").strip()
+        return f"exit {result.returncode}: {stderr[-800:]}"
+    return ""
+
+
 def vieneu_tts(
     text: str,
     voice: str,
@@ -3041,35 +3227,16 @@ def vieneu_tts(
 
     with tempfile.TemporaryDirectory(prefix=".mpt-vieneu-", dir=output_dir) as work_dir:
         wav_file = os.path.join(work_dir, "vieneu.wav")
-        request = json.dumps(
-            {"text": text, "voice": voice, "output": wav_file}, ensure_ascii=False
-        ).encode("utf-8")
-        env = dict(os.environ)
-        env["PYTHONIOENCODING"] = "utf-8"
-        env["PYTHONUTF8"] = "1"
         logger.info(f"start vieneu tts, voice: {voice}, timeout: {timeout:g}s")
         started = time.monotonic()
-        try:
-            result = subprocess.run(
-                [python_path, worker],
-                input=request,
-                capture_output=True,
-                check=False,
-                timeout=timeout,
-                env=env,
-            )
-        except subprocess.TimeoutExpired:
-            logger.error(f"VieNeu TTS timed out after {timeout:g} seconds")
-            return None
-        except OSError as exc:
-            logger.error(f"failed to start VieNeu TTS: {exc}")
-            return None
-
-        if result.returncode != 0 or not os.path.exists(wav_file):
-            stderr = (result.stderr or b"").decode("utf-8", errors="replace").strip()
-            logger.error(
-                f"VieNeu TTS failed (exit {result.returncode}): {stderr[-800:]}"
-            )
+        error = _run_vieneu_request(
+            python_path,
+            worker,
+            {"text": text, "voice": voice, "output": wav_file},
+            timeout,
+        )
+        if error or not os.path.exists(wav_file):
+            logger.error(f"VieNeu TTS failed: {error or 'no audio was written'}")
             return None
         logger.info(f"vieneu tts synthesized in {time.monotonic() - started:.1f}s")
 

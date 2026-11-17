@@ -48,6 +48,7 @@ from app.models.schema import (
 from app.services import affiliate as affiliate_service
 from app.services import bgm as bgm_service
 from app.services import material_upload as material_upload_service
+from app.services import product_batch as product_batch_service
 from app.services import (
     cache_manager,
     llm,
@@ -2225,6 +2226,13 @@ def _render_generation_task_snapshot(task_id, task):
             f"failed to render generated video preview: task_id={task_id}, "
             f"video_files={video_files}, error={exc}"
         )
+
+    post_text = str(task.get("post_text") or "").strip()
+    if post_text:
+        with st.container(border=True, key=f"post_text_{task_id}"):
+            st.write(tr("Post Caption Ready"))
+            st.caption(tr("Post Caption Copy Help"))
+            st.code(post_text, language=None, wrap_lines=True)
 
     _render_generation_logs(task_id)
     if (
@@ -6057,6 +6065,226 @@ def _render_script_settings(panel, params):
             )
 
 
+DEFAULT_CTA_TEXT_KEY = "Sales Overlay Default CTA"
+
+
+def _generate_hooks_into_session():
+    """按钮回调：用当前 LLM 生成 5 句开头钩子，每行一句写入输入框。"""
+    subject = str(st.session_state.get("video_subject", "") or "").strip()
+    script = str(st.session_state.get("video_script", "") or "").strip()
+    if not subject and not script:
+        st.session_state["sales_hook_error"] = tr("Hooks Need Subject")
+        return
+    hooks = llm.generate_hooks(subject=subject, script=script, count=5)
+    if hooks:
+        st.session_state["sales_hook_text"] = "\n".join(hooks)
+        st.session_state.pop("sales_hook_error", None)
+    else:
+        st.session_state["sales_hook_error"] = tr("Hooks Generation Failed")
+
+
+PRODUCT_BATCH_ROWS_KEY = "product_batch_rows"
+
+
+def _render_product_batch_settings(panel):
+    """渲染“从 Excel/CSV 批量做视频”：每行一个商品，其余设置沿用表单。"""
+    with panel:
+        with st.container(border=True, key="step_card_product_batch"):
+            st.write(tr("Product Batch Settings"))
+            st.caption(tr("Product Batch Help"))
+            st.download_button(
+                tr("Download Product Template"),
+                data=product_batch_service.template_csv(),
+                file_name="mau-san-pham.csv",
+                mime="text/csv",
+                icon=":material/download:",
+                key="product_batch_template",
+            )
+            sheet = st.file_uploader(
+                tr("Product Batch Upload"),
+                type=["xlsx", "csv"],
+                key="product_batch_file",
+            )
+            if sheet is None:
+                st.session_state.pop(PRODUCT_BATCH_ROWS_KEY, None)
+                return False
+            try:
+                rows = product_batch_service.parse_product_sheet(
+                    sheet.name, sheet.getvalue()
+                )
+            except product_batch_service.ProductSheetError as exc:
+                st.session_state.pop(PRODUCT_BATCH_ROWS_KEY, None)
+                st.error(str(exc))
+                return False
+            st.session_state[PRODUCT_BATCH_ROWS_KEY] = rows
+            st.dataframe(
+                [
+                    {
+                        tr("Product Batch Column Name"): row.name,
+                        tr("Sale Price"): row.price,
+                        tr("Original Price"): row.original_price,
+                        tr("Hook Text"): row.hook,
+                        tr("Product Batch Column Images"): row.images,
+                    }
+                    for row in rows
+                ],
+                hide_index=True,
+                use_container_width=True,
+            )
+            return st.button(
+                tr("Generate Product Batch").format(count=len(rows)),
+                key="product_batch_generate",
+                icon=":material/playlist_play:",
+                use_container_width=True,
+                disabled=_generation_is_busy(_current_generation_task_id()),
+            )
+
+
+def _submit_product_batch(params, voice_mode):
+    """逐行检查后把每个商品排进生成队列（队列一次只跑一个任务）。"""
+    rows = st.session_state.get(PRODUCT_BATCH_ROWS_KEY) or []
+    if voice_mode == VOICE_MODE_UPLOAD:
+        st.error(tr("Product Batch Needs TTS"))
+        return False
+    problems = []
+    for row in rows:
+        for error in product_batch_service.check_product(row, params):
+            problems.append(
+                tr("Product Batch Row Error").format(line=row.line, error=error)
+            )
+    if problems:
+        # 任何一行有问题都不提交，避免只做了一半而用户不知道哪些成功。
+        st.error("\n\n".join(problems[:20]))
+        return False
+
+    voxcpm_kwargs = {}
+    if voice.is_voxcpm_voice(params.voice_name or ""):
+        voxcpm_kwargs = {
+            "voxcpm_reference_audio": _get_voxcpm_reference_audio(),
+            "voxcpm_prompt_audio": _get_voxcpm_effective_prompt_audio(),
+            "voxcpm_prompt_text": _get_voxcpm_prompt_text(),
+        }
+    _save_runtime_config()
+    first_task_id = None
+    submitted = 0
+    for row in rows:
+        try:
+            row_params = product_batch_service.build_product_params(params, row)
+        except (
+            product_batch_service.ProductSheetError,
+            material_upload_service.MaterialUploadError,
+            material_upload_service.MaterialServiceError,
+            OSError,
+        ) as exc:
+            st.error(
+                tr("Product Batch Row Error").format(line=row.line, error=str(exc))
+            )
+            continue
+        task_id = str(uuid4())
+        subject = row_params.video_subject or task_id
+        _add_active_generation_task(task_id, subject=subject)
+        try:
+            task_id = webui_task.submit_generation(
+                task_id=task_id,
+                params=row_params,
+                capture_logs=not config.ui.get("hide_log", False),
+                **voxcpm_kwargs,
+            )
+        except Exception as exc:
+            _remove_active_generation_task(task_id)
+            logger.error(f"product batch submission failed: line={row.line}, {exc}")
+            st.error(
+                tr("Product Batch Row Error").format(
+                    line=row.line, error=tr("Video Generation Failed")
+                )
+            )
+            continue
+        _add_active_generation_task(task_id, subject=subject)
+        first_task_id = first_task_id or task_id
+        submitted += 1
+    if not submitted:
+        return False
+    logger.info(f"product batch submitted: tasks={submitted}")
+    st.session_state["product_batch_submitted"] = submitted
+    st.session_state["current_generation_task_id"] = first_task_id
+    st.query_params["generation_task"] = first_task_id
+    st.rerun()
+    return True
+
+
+def _render_sales_overlay_settings(panel, params):
+    """渲染带货视频的叠加文字：开头钩子、价格标签和结尾行动号召。"""
+    with panel:
+        with st.container(border=True, key="step_card_sales_overlay"):
+            st.write(tr("Sales Overlay Settings"))
+            st.caption(tr("Sales Overlay Help"))
+            hook_error = st.session_state.pop("sales_hook_error", None)
+            if hook_error:
+                st.warning(hook_error)
+            params.hook_text = st.text_area(
+                tr("Hook Text"),
+                key="sales_hook_text",
+                max_chars=800,
+                height=110,
+                placeholder=tr("Hook Text Placeholder"),
+                help=tr("Hook Text Help"),
+            ).strip()
+            hook_count = len([l for l in params.hook_text.splitlines() if l.strip()])
+            if hook_count > 1:
+                st.caption(
+                    tr("Hook Variants Caption").format(count=hook_count)
+                )
+            st.button(
+                tr("Generate Hooks with AI"),
+                key="generate_hooks_button",
+                icon=":material/auto_awesome:",
+                on_click=_generate_hooks_into_session,
+                use_container_width=True,
+            )
+            price_cols = st.columns(2)
+            with price_cols[0]:
+                params.price_text = st.text_input(
+                    tr("Sale Price"),
+                    key="sales_price_text",
+                    max_chars=40,
+                    placeholder="59.000đ",
+                ).strip()
+            with price_cols[1]:
+                params.original_price_text = st.text_input(
+                    tr("Original Price"),
+                    key="sales_original_price_text",
+                    max_chars=40,
+                    placeholder="99.000đ",
+                ).strip()
+            if "sales_cta_text" not in st.session_state:
+                st.session_state["sales_cta_text"] = config.ui.get(
+                    "cta_text", tr(DEFAULT_CTA_TEXT_KEY)
+                )
+            params.cta_text = st.text_input(
+                tr("CTA Text"),
+                key="sales_cta_text",
+                max_chars=80,
+                help=tr("CTA Text Help"),
+            ).strip()
+            _set_runtime_config("ui", "cta_text", params.cta_text)
+            params.affiliate_link = st.text_input(
+                tr("Affiliate Link"),
+                key="sales_affiliate_link",
+                max_chars=500,
+                placeholder="https://s.shopee.vn/...",
+                help=tr("Affiliate Link Help"),
+            ).strip()
+            params.post_caption_enabled = st.checkbox(
+                tr("Generate Post Caption"),
+                value=bool(config.ui.get("post_caption_enabled", True)),
+                key="sales_post_caption_enabled",
+                help=tr("Generate Post Caption Help"),
+            )
+            _set_runtime_config(
+                "ui", "post_caption_enabled", params.post_caption_enabled
+            )
+
+
 def _render_video_settings(panel, params):
     """渲染视频设置并返回本次选择的本地素材。"""
     uploaded_files = []
@@ -6279,13 +6507,14 @@ def _render_video_settings(panel, params):
                 image_motion_labels = {
                     ImageMotion.static.value: tr("Static Image"),
                     ImageMotion.zoom.value: tr("Slow Zoom"),
+                    ImageMotion.gentle.value: tr("Gentle Zoom No Crop"),
                 }
                 params.image_motion = ImageMotion(
                     stable_selectbox(
                         tr("Image Motion"),
                         options=list(image_motion_labels),
                         default_value=_saved_ui_choice(
-                            "image_motion", list(image_motion_labels), ImageMotion.zoom.value,
+                            "image_motion", list(image_motion_labels), ImageMotion.gentle.value,
                             # 生成任务持锁时，切换语言或素材来源会重建控件；
                             # 此时必须恢复尚未落盘的最新选择，不能写回旧配置值。
                             section=config.snapshot_config_with_pending(config.ui),
@@ -6334,6 +6563,16 @@ def _render_video_settings(panel, params):
             _set_runtime_config(
                 "ui", "video_clip_duration", params.video_clip_duration
             )
+            video_count_options = [1, 2, 3, 4, 5]
+            params.video_count = stable_selectbox(
+                tr("Number of Videos Generated Simultaneously"),
+                options=video_count_options,
+                default_value=_saved_ui_choice(
+                    "video_count", video_count_options, 1
+                ),
+                key="video_count_select",
+            )
+            _set_runtime_config("ui", "video_count", params.video_count)
             # 少用的性能/编码参数收进“高级视频设置”，主界面只留做商品视频需要的选项。
             with st.container(key="advanced_settings_video"):
                 with st.expander(tr("Advanced Video Settings"), expanded=False):
@@ -6357,16 +6596,6 @@ def _render_video_settings(panel, params):
                         help=tr("Clip Speed Help"),
                     )
                     _set_runtime_config("ui", "video_clip_speed", params.video_clip_speed)
-                    video_count_options = [1, 2, 3, 4, 5]
-                    params.video_count = stable_selectbox(
-                        tr("Number of Videos Generated Simultaneously"),
-                        options=video_count_options,
-                        default_value=_saved_ui_choice(
-                            "video_count", video_count_options, 1
-                        ),
-                        key="video_count_select",
-                    )
-                    _set_runtime_config("ui", "video_count", params.video_count)
 
                     video_codec_options = [
                         (tr("Default Video Encoder"), DEFAULT_VIDEO_CODEC_OPTION),
@@ -9558,6 +9787,14 @@ def _render_application():
         st.session_state.get("match_materials_to_script", False)
     )
     _render_script_settings(left_panel, params)
+    _render_sales_overlay_settings(left_panel, params)
+    product_batch_requested = _render_product_batch_settings(left_panel)
+    batch_submitted_count = st.session_state.pop("product_batch_submitted", 0)
+    if batch_submitted_count:
+        with left_panel:
+            st.success(
+                tr("Product Batch Submitted").format(count=batch_submitted_count)
+            )
 
     uploaded_files = _render_video_settings(middle_panel, params)
     uploaded_audio_file, uploaded_bgm_file, voice_mode = _render_audio_settings(
@@ -9573,6 +9810,9 @@ def _render_application():
         uploaded_bgm_file,
         voice_mode,
     )
+    if product_batch_requested and not generation_submitted:
+        # 批量提交放在所有步骤渲染完之后，这样每个商品都沿用完整的表单设置。
+        generation_submitted = _submit_product_batch(params, voice_mode)
 
     # 生成分支在启动后台线程前已经请求过保存。普通控件交互继续请求非阻塞保存；
     # 如果后台任务正在使用配置，配置层会在任务结束时自动应用并落盘最新值。
