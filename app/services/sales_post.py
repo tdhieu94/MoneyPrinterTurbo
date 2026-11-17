@@ -113,6 +113,61 @@ def engagement_question(seed: str = "") -> str:
     return ENGAGEMENT_QUESTIONS[index]
 
 
+_SHOPEE_MIN_CAPTION = 50
+
+
+def compose_shopee_text(
+    *,
+    caption: str,
+    hashtags,
+    price_line: str = "",
+    cta: str = "",
+    question: str = "",
+    limit: int = SHOPEE_CAPTION_LIMIT,
+) -> str:
+    """The whole Shopee Video description, at most ``limit`` characters.
+
+    Shopee counts every character of the description, line breaks included,
+    so the parts are joined with single line breaks and trimmed in this
+    order until they fit: the comment question, then hashtags, then the
+    caption (down to a short summary), then the call to action.
+    """
+    caption = " ".join((caption or "").split())
+    price_line = _shorten(price_line, limit)
+    cta = _shorten(cta or "Bấm giỏ hàng để mua ngay", 60)
+    tags = _merge_hashtags(hashtags, limit=5)
+
+    def build(caption_text, with_question, tag_count, cta_text):
+        lines = [caption_text, price_line, cta_text]
+        if with_question:
+            lines.append(question)
+        lines.append(" ".join(tags[:tag_count]))
+        return "\n".join(line for line in lines if line and line.strip())
+
+    def fit_caption(with_question, tag_count, cta_text, min_caption):
+        fixed = build("", with_question, tag_count, cta_text)
+        if not caption:
+            return fixed if len(fixed) <= limit else None
+        room = limit - len(fixed) - (1 if fixed else 0)
+        if len(caption) <= room:
+            return build(caption, with_question, tag_count, cta_text)
+        if room >= min_caption:
+            return build(_shorten(caption, room), with_question, tag_count, cta_text)
+        return None
+
+    options = [(True, n) for n in range(len(tags), 1, -1)] if question else []
+    options += [(False, n) for n in range(len(tags), -1, -1)]
+    for with_question, tag_count in options:
+        text = fit_caption(with_question, tag_count, cta, _SHOPEE_MIN_CAPTION)
+        if text is not None:
+            return text + "\n"
+    for cta_text in (cta, ""):
+        text = fit_caption(False, 0, cta_text, 1)
+        if text is not None:
+            return text + "\n"
+    return _shorten(caption or price_line or cta, limit) + "\n"
+
+
 def compose_platform_texts(
     *,
     caption: str,
@@ -134,13 +189,13 @@ def compose_platform_texts(
     cta = (cta or "").strip()
     question = engagement_question(question_seed or caption) if ask_question else ""
 
-    shopee = [_shorten(caption, SHOPEE_CAPTION_LIMIT)] if caption else []
-    if price_line:
-        shopee.append(price_line)
-    shopee.append(cta or "Bấm giỏ hàng để mua ngay")
-    if question:
-        shopee.append(question)
-    shopee.append(" ".join(_merge_hashtags(hashtags, limit=5)))
+    shopee_text = compose_shopee_text(
+        caption=caption,
+        hashtags=hashtags,
+        price_line=price_line,
+        cta=cta,
+        question=question,
+    )
 
     tiktok = [caption.strip()] if caption and caption.strip() else []
     if price_line:
@@ -168,7 +223,7 @@ def compose_platform_texts(
             facebook = f"{head}\n\n{question}\n\n{tags}\n"
         else:
             facebook = facebook.rstrip("\n") + f"\n\n{question}\n"
-    return {"shopee": join(shopee), "tiktok": join(tiktok), "facebook": facebook}
+    return {"shopee": shopee_text, "tiktok": join(tiktok), "facebook": facebook}
 
 
 def platform_texts_file(texts: dict[str, str]) -> str:

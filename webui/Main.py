@@ -2303,11 +2303,12 @@ def _render_generation_task_snapshot(task_id, task):
                     st.tabs([label for _, label in available]), available
                 ):
                     with platform_tab:
-                        st.code(
-                            str(post_texts[key]).strip(),
-                            language=None,
-                            wrap_lines=True,
-                        )
+                        text = str(post_texts[key]).strip()
+                        st.code(text, language=None, wrap_lines=True)
+                        if key == "shopee":
+                            st.caption(
+                                f"{len(text)}/{sales_post_service.SHOPEE_CAPTION_LIMIT}"
+                            )
             else:
                 st.code(post_text, language=None, wrap_lines=True)
     if state == const.TASK_STATE_COMPLETE:
