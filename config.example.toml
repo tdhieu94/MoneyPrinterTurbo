@@ -787,6 +787,10 @@ voices = []
 python_path = ""
 # The first run downloads/loads the model and can take several minutes.
 timeout_seconds = 900
+# Keep the model loaded between voiceovers (much faster after the first one).
+# The worker is stopped after idle_minutes without requests to free memory.
+keep_loaded = true
+idle_minutes = 30
 # Leave empty to use the built-in voice list.
 voices = []
 
