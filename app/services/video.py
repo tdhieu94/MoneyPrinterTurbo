@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import io
 import math
 import os
+import re
 import random
 import gc
 import subprocess
@@ -1046,6 +1047,32 @@ def _fit_clip_to_canvas(
     ).with_duration(clip.duration)
 
 
+# render_image_zoom_video names its output "<sha256>.<motion>[-smooth]-<16 hex>.mp4".
+_RENDERED_IMAGE_CLIP_RE = re.compile(
+    r"^[0-9a-f]{64}\.(?:static|zoom|gentle)(?:-smooth)?-[0-9a-f]{16}\.mp4$"
+)
+
+
+def is_rendered_image_clip(path: str) -> bool:
+    """True for clips this app rendered from a still photo."""
+    return bool(_RENDERED_IMAGE_CLIP_RE.match(os.path.basename(path or "")))
+
+
+def _lead_with_real_footage(items):
+    """Move the first slice of real (filmed) footage to the very start.
+
+    Shopee and TikTok favour videos that open on real footage rather than a
+    slideshow. Only one slice moves, so the rest keeps the chosen order and
+    variety; nothing changes when there is no filmed clip or it already leads.
+    """
+    for index, item in enumerate(items):
+        if not is_rendered_image_clip(item.source_file_path):
+            if index:
+                items = [item, *items[:index], *items[index + 1:]]
+            return items
+    return items
+
+
 def combine_videos(
     combined_video_path: str,
     video_paths: List[str],
@@ -1061,6 +1088,7 @@ def combine_videos(
     source_groups: dict[str, str] | None = None,
     used_video_paths: List[str] | None = None,
     progress_callback: Callable[[float], None] | None = None,
+    real_clip_first: bool = False,
 ) -> str:
     # Direct callers and persisted tasks can still supply the raw string.
     # Normalize it once for all downstream enum access.
@@ -1164,6 +1192,8 @@ def combine_videos(
         **({"source_usage": source_usage, "source_groups": source_groups}
            if source_usage is not None else {}),
     )
+    if real_clip_first:
+        subclipped_items = _lead_with_real_footage(subclipped_items)
     # Sequential mode appends its later slices after this index. They only fill
     # narration that the first slices leave uncovered.
     first_item_count = len(subclipped_items)

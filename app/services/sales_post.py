@@ -67,8 +67,91 @@ def compose_post_text(
     return "\n\n".join(lines).strip() + "\n"
 
 
-def build_post_text(params, video_script: str) -> str:
-    """Ask the configured LLM for a caption and compose the post text.
+PLATFORMS = (
+    ("shopee", "Shopee Video"),
+    ("tiktok", "TikTok"),
+    ("facebook", "Facebook Reels"),
+)
+SHOPEE_CAPTION_LIMIT = 150
+TIKTOK_HASHTAGS = ["#xuhuong", "#reviewsanpham", "#muasamonline", "#shopee"]
+
+
+def _shorten(text: str, limit: int) -> str:
+    text = " ".join((text or "").split())
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 1].rsplit(" ", 1)[0]
+    return cut.rstrip(",.;:!-") + "…"
+
+
+def _price_line(price: str, original_price: str) -> str:
+    price = (price or "").strip()
+    original_price = (original_price or "").strip()
+    if not price:
+        return ""
+    line = f"Giá chỉ {price}"
+    if original_price:
+        line += f" (giá gốc {original_price})"
+    return line
+
+
+def compose_platform_texts(
+    *,
+    caption: str,
+    hashtags,
+    price: str = "",
+    original_price: str = "",
+    cta: str = "",
+    link: str = "",
+) -> dict[str, str]:
+    """One post per platform, following what each one allows.
+
+    - Shopee Video: short caption; the product is tagged in the app, so no link.
+    - TikTok: links in captions are not clickable, so point to the bio link.
+    - Facebook Reels: the affiliate link goes straight into the post.
+    """
+    price_line = _price_line(price, original_price)
+    cta = (cta or "").strip()
+
+    shopee = [_shorten(caption, SHOPEE_CAPTION_LIMIT)] if caption else []
+    if price_line:
+        shopee.append(price_line)
+    shopee.append(cta or "Bấm giỏ hàng để mua ngay")
+    shopee.append(" ".join(_merge_hashtags(hashtags, limit=5)))
+
+    tiktok = [caption.strip()] if caption and caption.strip() else []
+    if price_line:
+        tiktok.append(price_line)
+    tiktok.append("👉 Link mua ở bio" if clean_link(link) else (cta or ""))
+    tiktok.append(" ".join(_merge_hashtags(hashtags, TIKTOK_HASHTAGS, limit=8)))
+
+    def join(lines):
+        return "\n\n".join(line for line in lines if line and line.strip()).strip() + "\n"
+
+    return {
+        "shopee": join(shopee),
+        "tiktok": join(tiktok),
+        "facebook": compose_post_text(
+            caption=caption,
+            hashtags=hashtags,
+            price=price,
+            original_price=original_price,
+            cta=cta,
+            link=link,
+        ),
+    }
+
+
+def platform_texts_file(texts: dict[str, str]) -> str:
+    blocks = []
+    for key, label in PLATFORMS:
+        if texts.get(key):
+            blocks.append(f"===== {label} =====\n\n{texts[key].strip()}\n")
+    return "\n".join(blocks)
+
+
+def build_platform_texts(params, video_script: str) -> dict[str, str]:
+    """Ask the configured LLM for a caption and compose a post per platform.
 
     ``llm.generate_social_metadata`` already falls back to a heuristic result
     when the model is unavailable, so this always returns usable text.
@@ -79,7 +162,7 @@ def build_post_text(params, video_script: str) -> str:
         language=getattr(params, "video_language", "") or "vi-VN",
         platform="facebook_reels",
     )
-    return compose_post_text(
+    return compose_platform_texts(
         caption=metadata.get("caption") or metadata.get("title") or "",
         hashtags=metadata.get("hashtags") or [],
         price=getattr(params, "price_text", ""),
@@ -89,13 +172,22 @@ def build_post_text(params, video_script: str) -> str:
     )
 
 
-def save_post_text(params, video_script: str, task_dir: str) -> str:
-    """Build and save the post text; return it, or "" when it failed."""
+def build_post_text(params, video_script: str) -> str:
+    return build_platform_texts(params, video_script)["facebook"]
+
+
+def save_post_texts(params, video_script: str, task_dir: str) -> dict[str, str]:
+    """Build and save the posts; return them, or {} when it failed."""
     try:
-        text = build_post_text(params, video_script)
+        texts = build_platform_texts(params, video_script)
         with open(os.path.join(task_dir, POST_FILENAME), "w", encoding="utf-8") as f:
-            f.write(text)
-        return text
+            f.write(platform_texts_file(texts))
+        return texts
     except Exception as exc:  # the video itself is already finished
         logger.warning(f"failed to build post text: {type(exc).__name__}: {exc}")
-        return ""
+        return {}
+
+
+def save_post_text(params, video_script: str, task_dir: str) -> str:
+    """Backwards-compatible: save all posts and return the Facebook one."""
+    return save_post_texts(params, video_script, task_dir).get("facebook", "")

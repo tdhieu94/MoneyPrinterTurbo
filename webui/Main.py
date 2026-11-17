@@ -49,6 +49,9 @@ from app.services import affiliate as affiliate_service
 from app.services import bgm as bgm_service
 from app.services import material_upload as material_upload_service
 from app.services import product_batch as product_batch_service
+from app.services import commission_report as commission_report_service
+from app.services import posting_log as posting_log_service
+from app.services import sales_post as sales_post_service
 from app.services import (
     cache_manager,
     llm,
@@ -2228,11 +2231,32 @@ def _render_generation_task_snapshot(task_id, task):
         )
 
     post_text = str(task.get("post_text") or "").strip()
-    if post_text:
+    post_texts = task.get("post_texts")
+    if not isinstance(post_texts, dict):
+        post_texts = {}
+    if post_text or post_texts:
         with st.container(border=True, key=f"post_text_{task_id}"):
             st.write(tr("Post Caption Ready"))
             st.caption(tr("Post Caption Copy Help"))
-            st.code(post_text, language=None, wrap_lines=True)
+            available = [
+                (key, label)
+                for key, label in sales_post_service.PLATFORMS
+                if str(post_texts.get(key) or "").strip()
+            ]
+            if available:
+                for platform_tab, (key, _) in zip(
+                    st.tabs([label for _, label in available]), available
+                ):
+                    with platform_tab:
+                        st.code(
+                            str(post_texts[key]).strip(),
+                            language=None,
+                            wrap_lines=True,
+                        )
+            else:
+                st.code(post_text, language=None, wrap_lines=True)
+    if state == const.TASK_STATE_COMPLETE:
+        _render_posted_marker(task_id, task)
 
     _render_generation_logs(task_id)
     if (
@@ -6083,6 +6107,176 @@ def _generate_hooks_into_session():
         st.session_state["sales_hook_error"] = tr("Hooks Generation Failed")
 
 
+SHOPEE_PRESET_VIENEU_VOICE = "vieneu:Ngọc Lan-Female"
+
+
+def _apply_shopee_preset():
+    """一键套用适合 Shopee/TikTok 带货短视频的设置（按钮回调，控件渲染前执行）。
+
+    只改画面、配音、字幕和音乐相关的控件；文案、价格、素材和已上传的文件
+    保持不变。
+    """
+    video_source = config.app.get("video_source") or "pexels"
+    _set_stable_widget_value(f"video_aspect_for_{video_source}", VideoAspect.portrait.value)
+    _set_stable_widget_value("video_fit_mode_select", VideoFitMode.blur.value)
+    _set_stable_widget_value("image_motion_select", ImageMotion.gentle.value)
+    _set_stable_widget_value("video_clip_duration_select", 3)
+    _set_stable_widget_value("video_transition_mode_select", VideoTransitionMode.fade_in.value)
+    st.session_state["real_clip_first_checkbox"] = True
+    st.session_state["paragraph_number_input"] = 1
+    if str(config.vieneu.get("python_path", "") or "").strip():
+        _set_stable_widget_value("voice_mode_control", VOICE_MODE_TTS)
+        _set_stable_widget_value("tts_server_select", "vieneu")
+        _set_stable_widget_value(
+            "speech_synthesis_select_vieneu", SHOPEE_PRESET_VIENEU_VOICE
+        )
+    _set_stable_widget_value("bgm_type_select", "random")
+    _set_stable_widget_value("bgm_volume_select", 0.2)
+    st.session_state["subtitle_enabled_checkbox"] = True
+    _set_stable_widget_value("subtitle_position_select", "bottom")
+    _set_stable_widget_value("subtitle_display_mode_select", "word_by_word")
+    _set_stable_widget_value("subtitle_animation_select", "pop_spring")
+    st.session_state["font_size_slider"] = 72
+    st.session_state["stroke_width_slider"] = 3.0
+    st.session_state["shopee_preset_applied"] = True
+
+
+def _render_shopee_preset_button():
+    with st.container(key="shopee_preset_bar"):
+        st.button(
+            tr("Shopee Preset Button"),
+            key="shopee_preset_button",
+            icon=":material/bolt:",
+            help=tr("Shopee Preset Help"),
+            on_click=_apply_shopee_preset,
+        )
+        if st.session_state.pop("shopee_preset_applied", False):
+            st.success(tr("Shopee Preset Applied"))
+
+
+def _toggle_posted(task_id, subject):
+    posted = bool(st.session_state.get(f"posted_checkbox_{task_id}"))
+    try:
+        posting_log_service.set_posted(task_id, subject, posted=posted)
+    except OSError as exc:
+        logger.error(f"failed to update posting log: {exc}")
+
+
+def _render_posted_marker(task_id, task):
+    """完成的视频下方显示“已发布”勾选框，用于统计 30 天内的发布节奏。"""
+    widget_key = f"posted_checkbox_{task_id}"
+    if widget_key not in st.session_state:
+        st.session_state[widget_key] = posting_log_service.is_posted(task_id)
+    st.checkbox(
+        tr("Mark As Posted"),
+        key=widget_key,
+        help=tr("Mark As Posted Help"),
+        on_change=_toggle_posted,
+        args=(task_id, str(task.get("video_subject") or "")),
+    )
+
+
+def _render_posting_pace():
+    pace = posting_log_service.pace()
+    st.write(tr("Posting Pace Title"))
+    st.progress(
+        min(1.0, pace["count"] / pace["target"]),
+        text=tr("Posting Pace Progress").format(
+            count=pace["count"], target=pace["target"]
+        ),
+    )
+    if pace["remaining"]:
+        st.info(tr("Posting Pace Remaining").format(remaining=pace["remaining"]))
+    else:
+        st.success(tr("Posting Pace Reached"))
+    if pace["days_since_last"] is not None and pace["days_since_last"] >= 3:
+        st.warning(
+            tr("Posting Pace Gap").format(days=int(pace["days_since_last"]))
+        )
+    if pace["posts"]:
+        st.dataframe(
+            [
+                {
+                    tr("Posted At"): datetime.fromtimestamp(post["posted_at"]).strftime(
+                        "%d/%m/%Y %H:%M"
+                    ),
+                    tr("Product Batch Column Name"): post.get("subject") or post["task_id"],
+                }
+                for post in pace["posts"]
+            ],
+            hide_index=True,
+            use_container_width=True,
+        )
+    else:
+        st.caption(tr("Posting Pace Empty"))
+
+
+def _render_commission_report():
+    st.write(tr("Commission Report Title"))
+    st.caption(tr("Commission Report Help"))
+    report = st.file_uploader(
+        tr("Commission Report Upload"),
+        type=["csv", "xlsx"],
+        key="commission_report_file",
+    )
+    if report is None:
+        return
+    try:
+        summary = commission_report_service.summarize_report(
+            report.name, report.getvalue()
+        )
+    except commission_report_service.CommissionReportError as exc:
+        st.error(str(exc))
+        return
+    money = commission_report_service.format_vnd
+    metric_cols = st.columns(3)
+    metric_cols[0].metric(tr("Commission Total"), money(summary.total_commission))
+    metric_cols[1].metric(tr("Commission Orders"), summary.orders)
+    metric_cols[2].metric(tr("Commission Pending"), money(summary.pending_commission))
+    if summary.cancelled_orders:
+        st.caption(
+            tr("Commission Cancelled").format(
+                count=summary.cancelled_orders,
+                amount=money(summary.cancelled_commission),
+            )
+        )
+
+    def table(rows, label_key, label):
+        return [
+            {
+                label: row[label_key],
+                tr("Commission Orders"): row["orders"],
+                tr("Commission Items"): row["items"],
+                tr("Commission Amount"): money(row["commission"]),
+            }
+            for row in rows
+        ]
+
+    st.write(tr("Commission By Product"))
+    st.dataframe(
+        table(summary.products, "product", tr("Product Batch Column Name")),
+        hide_index=True,
+        use_container_width=True,
+    )
+    if summary.has_sub_id:
+        st.write(tr("Commission By Sub ID"))
+        st.dataframe(
+            table(summary.sub_ids, "sub_id", "Sub_ID"),
+            hide_index=True,
+            use_container_width=True,
+        )
+    else:
+        st.caption(tr("Commission Sub ID Hint"))
+
+
+def _render_tracking(panel):
+    with panel:
+        with st.container(border=True, key="step_card_posting"):
+            _render_posting_pace()
+        with st.container(border=True, key="step_card_commission"):
+            _render_commission_report()
+
+
 PRODUCT_BATCH_ROWS_KEY = "product_batch_rows"
 
 
@@ -6267,6 +6461,16 @@ def _render_sales_overlay_settings(panel, params):
                 help=tr("CTA Text Help"),
             ).strip()
             _set_runtime_config("ui", "cta_text", params.cta_text)
+            if "sales_channel_name" not in st.session_state:
+                st.session_state["sales_channel_name"] = config.ui.get("channel_name", "")
+            params.channel_name = st.text_input(
+                tr("Channel Name"),
+                key="sales_channel_name",
+                max_chars=40,
+                placeholder="@reviewnhacua",
+                help=tr("Channel Name Help"),
+            ).strip()
+            _set_runtime_config("ui", "channel_name", params.channel_name)
             params.affiliate_link = st.text_input(
                 tr("Affiliate Link"),
                 key="sales_affiliate_link",
@@ -6525,6 +6729,18 @@ def _render_video_settings(panel, params):
                     )
                 )
                 _set_runtime_config("ui", "image_motion", params.image_motion.value)
+
+            if params.video_source == "local":
+                st.session_state.setdefault(
+                    "real_clip_first_checkbox",
+                    bool(config.ui.get("real_clip_first", True)),
+                )
+                params.real_clip_first = st.checkbox(
+                    tr("Real Clip First"),
+                    key="real_clip_first_checkbox",
+                    help=tr("Real Clip First Help"),
+                )
+                _set_runtime_config("ui", "real_clip_first", params.real_clip_first)
 
             # MiniMax H3 的远端时长范围是 4～15 秒。选择秘塔时使用完整能力
             # 范围，既避免 2/3 秒被按 4 秒计费，也让 WebUI 与 CLI、服务层一致。
@@ -9761,6 +9977,8 @@ def _render_application():
     if restore_applied or restore_succeeded:
         st.success(tr("Task Configuration Loaded"))
 
+    _render_shopee_preset_button()
+
     # 按做一条带货视频的顺序分成 4 个步骤标签页。每个标签页都会渲染（Streamlit
     # tabs 只是隐藏），所以参数收集逻辑与原四列布局完全相同。
     with st.container(key="main_settings_grid"):
@@ -9770,6 +9988,7 @@ def _render_application():
                 tr("Step Visuals Tab"),
                 tr("Step Voice Tab"),
                 tr("Step Subtitles Tab"),
+                tr("Tracking Tab"),
             ]
         )
     panels = []
@@ -9780,7 +9999,7 @@ def _render_application():
                 with st.container(key=f"step_tip_{step_index}"):
                     st.markdown(tr(f"Step {step_index} Tip"))
         panels.append(main_col)
-    left_panel, middle_panel, audio_panel, right_panel = panels
+    left_panel, middle_panel, audio_panel, right_panel, tracking_panel = panels
 
     params = VideoParams(video_subject="")
     params.match_materials_to_script = bool(
@@ -9802,6 +10021,7 @@ def _render_application():
     )
 
     _render_subtitle_settings(right_panel, params)
+    _render_tracking(tracking_panel)
 
     generation_submitted = _render_generation_controls(
         params,
