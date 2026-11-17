@@ -1,5 +1,6 @@
 import json
 import math
+import hashlib
 import os
 import re
 import socket
@@ -15,7 +16,7 @@ from loguru import logger
 
 from app.config import config
 from app.models import const
-from app.models.schema import VideoConcatMode, VideoParams
+from app.models.schema import MaterialInfo, VideoAspect, VideoConcatMode, VideoParams
 from app.services import bgm as bgm_service
 from app.services import (
     codex_image,
@@ -38,7 +39,7 @@ from app.services import (
     volcengine_seedance,
     voice,
 )
-from app.services import sales_overlay, sales_post
+from app.services import sales_overlay, sales_post, thumbnail
 from app.services import upload_post
 from app.services import state as sm
 from app.utils import file_security, utils
@@ -727,6 +728,35 @@ def generate_subtitle(task_id, params, video_script, sub_maker, audio_file):
         return final_subtitle_path
 
 
+def _with_before_after_scene(params):
+    """Prepend a before/after comparison image when both photos are given."""
+    materials = list(params.video_materials or [])
+    before = str(getattr(params, "compare_before", "") or "").strip()
+    after = str(getattr(params, "compare_after", "") or "").strip()
+    if not before or not after:
+        return materials
+    from app.services import product_images
+    from app.utils import file_security
+
+    local_dir = utils.storage_dir("local_videos", create=True)
+    try:
+        before_path = file_security.resolve_path_within_directory(local_dir, before)
+        after_path = file_security.resolve_path_within_directory(local_dir, after)
+        digest = hashlib.sha256(
+            f"{before_path}|{after_path}|{params.video_aspect}".encode()
+        ).hexdigest()[:24]
+        output = os.path.join(local_dir, f"{digest}.compare.png")
+        size = VideoAspect(params.video_aspect or VideoAspect.portrait).to_resolution()
+        product_images.compose_before_after(before_path, after_path, output, size)
+    except Exception as exc:
+        logger.warning(f"skip before/after scene: {type(exc).__name__}: {exc}")
+        return materials
+    scene = MaterialInfo()
+    scene.provider = "local"
+    scene.url = output
+    return [scene, *materials]
+
+
 def get_video_materials(
     task_id,
     params,
@@ -739,9 +769,10 @@ def get_video_materials(
     if params.video_source == "local":
         logger.info("\n\n## preprocess local materials")
         materials = video.preprocess_video(
-            materials=params.video_materials,
+            materials=_with_before_after_scene(params),
             clip_duration=params.video_clip_duration,
             image_motion=params.image_motion,
+            remove_background=bool(getattr(params, "remove_background", False)),
         )
         if not materials:
             _mark_task_failed(
@@ -1084,6 +1115,7 @@ def generate_final_videos(
                 task_id, _progress, _progress + combine_share
             ),
             real_clip_first=bool(getattr(params, "real_clip_first", False)),
+            smart_trim=bool(getattr(params, "smart_trim", False)),
             **batch_options,
         )
         if allocate_batch_materials:
@@ -1949,12 +1981,22 @@ def _run_pipeline(
             params, video_script, utils.task_dir(task_id)
         )
     post_text = post_texts.get("facebook", "")
+    cover_image = ""
+    if getattr(params, "cover_enabled", True) and (combined_video_paths or final_video_paths):
+        cover_image = thumbnail.save_cover(
+            params,
+            (combined_video_paths or final_video_paths)[0],
+            utils.task_dir(task_id),
+        )
 
     kwargs = {
         "videos": final_video_paths,
         "combined_videos": combined_video_paths,
         "post_text": post_text or None,
         "post_texts": post_texts or None,
+        "cover_image": cover_image or None,
+        "hook_text": str(getattr(params, "hook_text", "") or "") or None,
+        "sub_id": str(getattr(params, "sub_id", "") or "") or None,
         "script": video_script,
         "terms": video_terms,
         "audio_file": audio_file,

@@ -137,6 +137,19 @@ class VideoParams(BaseModel):
     real_clip_first: bool = False
     # Small channel name shown in a corner for the whole video.
     channel_name: str = Field(default="", max_length=40)
+    # Social proof and urgency badges, e.g. "Đã bán 10k+", "4.9", "Chỉ hôm nay".
+    sold_text: str = Field(default="", max_length=40)
+    rating_text: str = Field(default="", max_length=10)
+    urgency_text: str = Field(default="", max_length=30)
+    # Sub_ID used in this video's affiliate link, to match commission reports.
+    sub_id: str = Field(default="", max_length=50)
+    # Cut the product out of its photo background (needs the optional rembg).
+    remove_background: bool = False
+    # Skip blurry or nearly black slices of filmed clips.
+    smart_trim: bool = False
+    # Optional before/after photos shown side by side as the first scene.
+    compare_before: str = ""
+    compare_after: str = ""
 
     video_source: Optional[str] = "pexels"
     video_materials: Optional[List[MaterialInfo]] = (

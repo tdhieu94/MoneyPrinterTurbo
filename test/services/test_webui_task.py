@@ -365,6 +365,7 @@ def test_terminal_task_renders_subject_named_video_download(
         ),
         "_render_generation_logs": lambda _task_id: None,
         "_render_posted_marker": lambda _task_id, _task: None,
+        "_render_cover_image": lambda _task_id, _task: None,
     }
     module = ast.fix_missing_locations(ast.Module(body=selected_nodes, type_ignores=[]))
     exec(compile(module, str(WEBUI_MAIN), "exec"), namespace)

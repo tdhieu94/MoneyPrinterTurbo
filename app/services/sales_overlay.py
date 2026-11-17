@@ -69,7 +69,10 @@ def params_for_variant(params, index: int):
 def has_overlays(params) -> bool:
     return any(
         str(getattr(params, name, "") or "").strip()
-        for name in ("hook_text", "price_text", "cta_text", "channel_name")
+        for name in (
+            "hook_text", "price_text", "cta_text", "channel_name",
+            "sold_text", "rating_text", "urgency_text",
+        )
     )
 
 
@@ -237,6 +240,59 @@ def render_channel(name: str, width: int, font_path: str | None = None) -> Image
     return image
 
 
+def _star(draw: ImageDraw.ImageDraw, cx: float, cy: float, radius: float, fill) -> None:
+    """Draw a five-point star (the bundled font has no emoji)."""
+    import math
+
+    points = []
+    for index in range(10):
+        r = radius if index % 2 == 0 else radius * 0.45
+        angle = -math.pi / 2 + index * math.pi / 5
+        points.append((cx + r * math.cos(angle), cy + r * math.sin(angle)))
+    draw.polygon(points, fill=fill)
+
+
+def render_proof(rating: str, sold: str, width: int, font_path: str | None = None) -> Image.Image:
+    """A dark pill with "★ 4.9 · Đã bán 10k+" (social proof)."""
+    rating = (rating or "").strip()
+    sold = (sold or "").strip()
+    size = max(16, int(width * 0.038))
+    font = _font(size, font_path)
+    star_w = int(size * 1.1) if rating else 0
+    text = " · ".join(part for part in (rating, sold) if part)
+    pad_x = int(size * 0.8)
+    pad_y = int(size * 0.4)
+    box_w = star_w + int(font.getlength(text)) + pad_x * 2
+    box_h = int(size * 1.3) + pad_y * 2
+    image = Image.new("RGBA", (box_w, box_h), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((0, 0, box_w - 1, box_h - 1), radius=box_h // 2, fill=(20, 20, 20, 190))
+    x = pad_x
+    if rating:
+        _star(draw, x + size * 0.45, box_h / 2, size * 0.5, (255, 196, 0, 255))
+        x += star_w
+    draw.text((x, pad_y), text, font=font, fill=WHITE)
+    return image
+
+
+def render_urgency(text: str, width: int, font_path: str | None = None) -> Image.Image:
+    """A bold red tag such as "CHỈ HÔM NAY"."""
+    text = text.strip().upper()
+    size = max(16, int(width * 0.04))
+    font = _font(size, font_path)
+    text = _wrap(text, font, int(width * 0.45))[0]
+    pad_x = int(size * 0.7)
+    pad_y = int(size * 0.35)
+    box_w = int(font.getlength(text)) + pad_x * 2
+    box_h = int(size * 1.3) + pad_y * 2
+    image = Image.new("RGBA", (box_w + 6, box_h + 6), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.rounded_rectangle((5, 6, box_w + 5, box_h + 5), radius=size // 3, fill=(0, 0, 0, 90))
+    draw.rounded_rectangle((0, 0, box_w, box_h), radius=size // 3, fill=(214, 0, 28, 255))
+    draw.text((pad_x, pad_y), text, font=font, fill=(255, 241, 118, 255))
+    return image
+
+
 def _clip(image: Image.Image, span, x, y):
     start, end = span
     return (
@@ -268,6 +324,23 @@ def build_overlay_clips(params, width: int, height: int, duration: float) -> lis
         image = render_price(price, original, width)
         clips.append(
             _clip(image, timeline.price, (width - image.width) / 2, height * 0.1)
+        )
+        price_bottom = height * 0.1 + image.height
+    else:
+        price_bottom = height * 0.1
+    rating = str(getattr(params, "rating_text", "") or "").strip()
+    sold = str(getattr(params, "sold_text", "") or "").strip()
+    if (rating or sold) and duration > 0:
+        image = render_proof(rating, sold, width)
+        span = timeline.price or ((timeline.hook[1] if timeline.hook else 0.0), duration)
+        clips.append(
+            _clip(image, span, (width - image.width) / 2, price_bottom + height * 0.012)
+        )
+    urgency = str(getattr(params, "urgency_text", "") or "").strip()
+    if urgency and duration > 0:
+        image = render_urgency(urgency, width)
+        clips.append(
+            _clip(image, (0.0, duration), width * 0.96 - image.width, height * 0.035)
         )
     if timeline.cta:
         image = render_cta(cta, width)

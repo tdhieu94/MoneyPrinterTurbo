@@ -1073,6 +1073,68 @@ def _lead_with_real_footage(items):
     return items
 
 
+def _frame_quality(frame) -> tuple[float, float]:
+    """(sharpness, brightness) of one frame, measured on a small grey copy."""
+    image = Image.fromarray(np.asarray(frame).astype("uint8")).convert("L")
+    image.thumbnail((320, 320))
+    grey = np.asarray(image, dtype=np.float32)
+    laplacian = (
+        -4 * grey[1:-1, 1:-1]
+        + grey[:-2, 1:-1] + grey[2:, 1:-1] + grey[1:-1, :-2] + grey[1:-1, 2:]
+    )
+    return float(laplacian.var()), float(grey.mean())
+
+
+_WEAK_SLICE_SHARPNESS_RATIO = 0.35
+_DARK_FRAME_BRIGHTNESS = 18.0
+
+
+def _drop_weak_slices(items):
+    """Skip blurry (shaky) or almost black slices of filmed footage.
+
+    Each slice of a filmed clip is judged by its middle frame against the
+    other slices of the same clip, so a dim but steady video is not thrown
+    away. At least the best slice of every clip is kept, and photo clips are
+    never touched.
+    """
+    by_source: dict[str, list] = {}
+    for item in items:
+        if not is_rendered_image_clip(item.source_file_path):
+            by_source.setdefault(item.source_file_path, []).append(item)
+    dropped = set()
+    for source, slices in by_source.items():
+        if len(slices) < 2:
+            continue
+        clip = None
+        try:
+            clip = _open_video_clip_quietly(source)
+            scores = []
+            for item in slices:
+                middle = (item.start_time + item.end_time) / 2
+                scores.append((item, *_frame_quality(clip.get_frame(middle))))
+        except Exception as exc:
+            logger.warning(f"smart trim skipped for {source}: {exc}")
+            continue
+        finally:
+            close_clip(clip)
+        median = float(np.median([sharpness for _, sharpness, _ in scores]))
+        weak = [
+            item for item, sharpness, brightness in scores
+            if brightness < _DARK_FRAME_BRIGHTNESS
+            or sharpness < median * _WEAK_SLICE_SHARPNESS_RATIO
+        ]
+        if len(weak) >= len(slices):
+            best = max(scores, key=lambda row: row[1])[0]
+            weak = [item for item in weak if item is not best]
+        if weak:
+            logger.info(
+                f"smart trim: skip {len(weak)}/{len(slices)} blurry or dark "
+                f"slices of {os.path.basename(source)}"
+            )
+        dropped.update(id(item) for item in weak)
+    return [item for item in items if id(item) not in dropped]
+
+
 def combine_videos(
     combined_video_path: str,
     video_paths: List[str],
@@ -1089,6 +1151,7 @@ def combine_videos(
     used_video_paths: List[str] | None = None,
     progress_callback: Callable[[float], None] | None = None,
     real_clip_first: bool = False,
+    smart_trim: bool = False,
 ) -> str:
     # Direct callers and persisted tasks can still supply the raw string.
     # Normalize it once for all downstream enum access.
@@ -1186,6 +1249,12 @@ def combine_videos(
         else:
             subclipped_items.extend(segments)
 
+    if smart_trim:
+        subclipped_items = _drop_weak_slices(subclipped_items)
+        if later_items:
+            later_items = {
+                source: _drop_weak_slices(rest) for source, rest in later_items.items()
+            }
     subclipped_items = _prioritize_unique_source_clips(
         subclipped_items=subclipped_items,
         concat_mode=video_concat_mode,
@@ -2278,7 +2347,10 @@ def render_image_zoom_video(
 
 
 def preprocess_video(
-    materials: List[MaterialInfo], clip_duration=4, image_motion: ImageMotion = ImageMotion.zoom
+    materials: List[MaterialInfo],
+    clip_duration=4,
+    image_motion: ImageMotion = ImageMotion.zoom,
+    remove_background: bool = False,
 ):
     # WebUI 在某些二次生成场景下可能传入空素材列表，这里直接返回空结果，避免抛出 NoneType 异常。
     if not materials:
@@ -2348,6 +2420,12 @@ def preprocess_video(
                 # 探测尺寸时已经打开过一次素材，这里先释放探测句柄，再渲染
                 # 用于导出的图片片段。
                 close_clip(clip)
+                if remove_background:
+                    from app.services import product_images
+
+                    material_source_path = product_images.remove_background(
+                        material_source_path
+                    )
                 video_file = render_image_zoom_video(
                     material_source_path, clip_duration, image_motion=image_motion
                 )

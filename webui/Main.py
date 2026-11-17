@@ -50,7 +50,9 @@ from app.services import bgm as bgm_service
 from app.services import material_upload as material_upload_service
 from app.services import product_batch as product_batch_service
 from app.services import commission_report as commission_report_service
+from app.services import app_backup as app_backup_service
 from app.services import posting_log as posting_log_service
+from app.services import product_images as product_images_service
 from app.services import sales_post as sales_post_service
 from app.services import (
     cache_manager,
@@ -2115,17 +2117,19 @@ def _render_generation_activity(task):
         st.caption(tr("Generation Remote Task").format(task_id=activity["remote_id"]))
 
 
-def _toggle_posted(task_id, subject):
-    posted = bool(st.session_state.get(f"posted_checkbox_{task_id}"))
+def _toggle_posted(task_id, subject, hook="", sub_id="", widget_key=None):
+    posted = bool(st.session_state.get(widget_key or f"posted_checkbox_{task_id}"))
     try:
-        posting_log_service.set_posted(task_id, subject, posted=posted)
+        posting_log_service.set_posted(
+            task_id, subject, posted=posted, hook=hook, sub_id=sub_id
+        )
     except OSError as exc:
         logger.error(f"failed to update posting log: {exc}")
 
 
-def _render_posted_marker(task_id, task):
+def _render_posted_marker(task_id, task, widget_key=None):
     """完成的视频下方显示“已发布”勾选框，用于统计 30 天内的发布节奏。"""
-    widget_key = f"posted_checkbox_{task_id}"
+    widget_key = widget_key or f"posted_checkbox_{task_id}"
     if widget_key not in st.session_state:
         st.session_state[widget_key] = posting_log_service.is_posted(task_id)
     st.checkbox(
@@ -2133,8 +2137,37 @@ def _render_posted_marker(task_id, task):
         key=widget_key,
         help=tr("Mark As Posted Help"),
         on_change=_toggle_posted,
-        args=(task_id, str(task.get("video_subject") or "")),
+        args=(
+            task_id,
+            str(task.get("video_subject") or ""),
+            str(task.get("hook_text") or ""),
+            str(task.get("sub_id") or ""),
+            widget_key,
+        ),
     )
+
+
+def _render_cover_image(task_id, task):
+    cover = str(task.get("cover_image") or "")
+    if not cover or not os.path.isfile(cover):
+        return
+    with st.container(border=True, key=f"cover_image_{task_id}"):
+        st.write(tr("Cover Image Ready"))
+        cover_cols = st.columns([1, 2])
+        with cover_cols[0]:
+            st.image(cover, use_container_width=True)
+        with cover_cols[1]:
+            st.caption(tr("Cover Image Help"))
+            with open(cover, "rb") as cover_file:
+                st.download_button(
+                    tr("Download Cover"),
+                    data=cover_file.read(),
+                    file_name="anh-bia.jpg",
+                    mime="image/jpeg",
+                    key=f"download_cover_{task_id}",
+                    icon=":material/image:",
+                    on_click="ignore",
+                )
 
 
 def _render_generation_task_snapshot(task_id, task):
@@ -2278,6 +2311,7 @@ def _render_generation_task_snapshot(task_id, task):
             else:
                 st.code(post_text, language=None, wrap_lines=True)
     if state == const.TASK_STATE_COMPLETE:
+        _render_cover_image(task_id, task)
         _render_posted_marker(task_id, task)
 
     _render_generation_logs(task_id)
@@ -6160,18 +6194,83 @@ def _apply_shopee_preset():
     _set_stable_widget_value("subtitle_animation_select", "pop_spring")
     st.session_state["font_size_slider"] = 72
     st.session_state["stroke_width_slider"] = 3.0
+    category = CATEGORY_PRESETS.get(
+        st.session_state.get("shopee_preset_category"), CATEGORY_PRESETS["general"]
+    )
+    if category.get("voice") and str(config.vieneu.get("python_path", "") or "").strip():
+        _set_stable_widget_value(
+            "speech_synthesis_select_vieneu", f"vieneu:{category['voice']}"
+        )
+    if category.get("bgm_volume") is not None:
+        _set_stable_widget_value("bgm_volume_select", category["bgm_volume"])
+    if category.get("transition"):
+        _set_stable_widget_value("video_transition_mode_select", category["transition"])
+    if category.get("cta_key"):
+        st.session_state["sales_cta_text"] = tr(category["cta_key"])
     st.session_state["shopee_preset_applied"] = True
+
+
+# 各品类只调整声音、音乐、转场和行动号召，其余沿用标准 Shopee 设置。
+CATEGORY_PRESETS = {
+    "general": {"label": "Category General"},
+    "home": {
+        "label": "Category Home",
+        "voice": "Ngọc Lan-Female",
+        "bgm_volume": 0.2,
+        "cta_key": "Category Home CTA",
+    },
+    "beauty": {
+        "label": "Category Beauty",
+        "voice": "Mỹ Duyên-Female",
+        "bgm_volume": 0.3,
+        "transition": VideoTransitionMode.fade_in.value,
+        "cta_key": "Category Beauty CTA",
+    },
+    "food": {
+        "label": "Category Food",
+        "voice": "Trúc Ly-Female",
+        "bgm_volume": 0.3,
+        "cta_key": "Category Food CTA",
+    },
+    "fashion": {
+        "label": "Category Fashion",
+        "voice": "Ngọc Linh-Female",
+        "bgm_volume": 0.4,
+        "transition": VideoTransitionMode.slide_in.value,
+        "cta_key": "Category Fashion CTA",
+    },
+    "tech": {
+        "label": "Category Tech",
+        "voice": "Gia Bảo-Male",
+        "bgm_volume": 0.2,
+        "cta_key": "Category Tech CTA",
+    },
+}
 
 
 def _render_shopee_preset_button():
     with st.container(key="shopee_preset_bar"):
-        st.button(
-            tr("Shopee Preset Button"),
-            key="shopee_preset_button",
-            icon=":material/bolt:",
-            help=tr("Shopee Preset Help"),
-            on_click=_apply_shopee_preset,
-        )
+        preset_cols = st.columns([2, 3, 4], vertical_alignment="bottom")
+        with preset_cols[0]:
+            # 选项直接使用翻译后的名称（不用 format_func），再映射回品类 key。
+            labels = {tr(preset["label"]): key for key, preset in CATEGORY_PRESETS.items()}
+            selected_label = stable_selectbox(
+                tr("Product Category"),
+                options=list(labels),
+                default_value=tr(CATEGORY_PRESETS["general"]["label"]),
+                key="shopee_preset_category_select",
+            )
+            st.session_state["shopee_preset_category"] = labels.get(
+                selected_label, "general"
+            )
+        with preset_cols[1]:
+            st.button(
+                tr("Shopee Preset Button"),
+                key="shopee_preset_button",
+                icon=":material/bolt:",
+                help=tr("Shopee Preset Help"),
+                on_click=_apply_shopee_preset,
+            )
         if st.session_state.pop("shopee_preset_applied", False):
             st.success(tr("Shopee Preset Applied"))
 
@@ -6265,16 +6364,148 @@ def _render_commission_report():
             hide_index=True,
             use_container_width=True,
         )
+        try:
+            winners = posting_log_service.match_winning_hooks(summary.sub_ids)
+        except OSError as exc:
+            logger.warning(f"failed to save winning hooks: {exc}")
+            winners = []
+        if winners:
+            st.write(tr("Winning Hooks Title"))
+            st.dataframe(
+                [
+                    {
+                        tr("Hook Text"): winner["hook"],
+                        tr("Commission Orders"): winner["orders"],
+                        tr("Commission Amount"): money(winner["commission"]),
+                    }
+                    for winner in winners
+                ],
+                hide_index=True,
+                use_container_width=True,
+            )
+            st.caption(tr("Winning Hooks Saved"))
     else:
         st.caption(tr("Commission Sub ID Hint"))
+
+
+def _task_post_details(task):
+    """Hook and Sub_ID of a finished task, from its saved parameters."""
+    script_path = os.path.join(task.get("task_path") or "", "script.json")
+    try:
+        with open(script_path, "r", encoding="utf-8") as f:
+            params_data = (json.load(f) or {}).get("params") or {}
+    except (OSError, ValueError, AttributeError):
+        params_data = {}
+    return {
+        "video_subject": task.get("subject") or "",
+        "hook_text": str(params_data.get("hook_text") or ""),
+        "sub_id": str(params_data.get("sub_id") or ""),
+    }
+
+
+def _plan_date_changed(task_id, widget_key):
+    value = st.session_state.get(widget_key)
+    posting_log_service.set_plan_date(task_id, value.isoformat() if value else None)
+
+
+def _render_posting_schedule():
+    st.write(tr("Posting Schedule Title"))
+    st.caption(tr("Posting Schedule Help"))
+    try:
+        summaries = _collect_task_summaries(limit=50)
+    except Exception as exc:
+        logger.warning(f"failed to list tasks for the schedule: {exc}")
+        summaries = []
+    finished = [
+        task for task in summaries
+        if task.get("video_file")
+        and _normalize_task_state(task.get("state")) == const.TASK_STATE_COMPLETE
+        and not posting_log_service.is_posted(task["task_id"])
+    ]
+    if not finished:
+        st.caption(tr("Posting Schedule Empty"))
+        return
+    today = datetime.now().date()
+    plan = posting_log_service.auto_plan(
+        [task["task_id"] for task in reversed(finished)], today.isoformat()
+    )
+    due_today = [task for task in finished if plan.get(task["task_id"], "") <= today.isoformat()]
+    if due_today:
+        st.warning(
+            tr("Posting Schedule Today").format(
+                subjects=", ".join(_format_task_subject(t["subject"], max_length=40) for t in due_today)
+            )
+        )
+    for task in sorted(finished, key=lambda t: plan.get(t["task_id"], "9999")):
+        task_id = task["task_id"]
+        row = st.columns([4, 2, 2], vertical_alignment="center")
+        row[0].markdown(f"**{html.escape(_format_task_subject(task['subject'], max_length=60))}**")
+        date_key = f"plan_date_{task_id}"
+        if date_key not in st.session_state:
+            try:
+                st.session_state[date_key] = datetime.fromisoformat(plan[task_id]).date()
+            except (KeyError, ValueError):
+                st.session_state[date_key] = today
+        with row[1]:
+            st.date_input(
+                tr("Posting Date"),
+                key=date_key,
+                format="DD/MM/YYYY",
+                label_visibility="collapsed",
+                on_change=_plan_date_changed,
+                args=(task_id, date_key),
+            )
+        with row[2]:
+            _render_posted_marker(
+                task_id, _task_post_details(task), widget_key=f"schedule_posted_{task_id}"
+            )
+
+
+def _render_backup():
+    st.write(tr("App Backup Title"))
+    st.caption(tr("App Backup Help"))
+    backup_cols = st.columns(2)
+    with backup_cols[0]:
+        st.download_button(
+            tr("Download Backup"),
+            data=app_backup_service.build_backup(),
+            file_name=f"sao-luu-app-{datetime.now():%Y%m%d}.zip",
+            mime="application/zip",
+            key="download_app_backup",
+            icon=":material/backup:",
+            on_click="ignore",
+            use_container_width=True,
+        )
+    with backup_cols[1]:
+        uploaded = st.file_uploader(
+            tr("Restore Backup"), type=["zip"], key="restore_app_backup",
+            label_visibility="collapsed",
+        )
+    if uploaded is None or st.session_state.get("restored_backup_id") == uploaded.file_id:
+        return
+    st.session_state["restored_backup_id"] = uploaded.file_id
+    try:
+        result = app_backup_service.restore_backup(uploaded.getvalue())
+    except app_backup_service.BackupError as exc:
+        st.error(str(exc))
+        return
+    for key, value in result["settings"].items():
+        _set_runtime_config("ui", key, value)
+    st.success(
+        tr("Backup Restored").format(files=result["files"], settings=len(result["settings"]))
+    )
 
 
 def _render_tracking(panel):
     with panel:
         with st.container(border=True, key="step_card_posting"):
             _render_posting_pace()
+        with st.container(border=True, key="step_card_schedule"):
+            _render_posting_schedule()
         with st.container(border=True, key="step_card_commission"):
             _render_commission_report()
+        with st.container(border=True, key="step_card_backup"):
+            _render_backup()
 
 
 PRODUCT_BATCH_ROWS_KEY = "product_batch_rows"
@@ -6406,6 +6637,14 @@ def _submit_product_batch(params, voice_mode):
     return True
 
 
+def _use_winning_hook(hook):
+    current = str(st.session_state.get("sales_hook_text") or "").strip()
+    lines = [line for line in current.splitlines() if line.strip()]
+    if hook not in lines:
+        lines.insert(0, hook)
+    st.session_state["sales_hook_text"] = "\n".join(lines)[:800]
+
+
 def _render_sales_overlay_settings(panel, params):
     """渲染带货视频的叠加文字：开头钩子、价格标签和结尾行动号召。"""
     with panel:
@@ -6423,6 +6662,26 @@ def _render_sales_overlay_settings(panel, params):
                 placeholder=tr("Hook Text Placeholder"),
                 help=tr("Hook Text Help"),
             ).strip()
+            winning_hooks = posting_log_service.load_winning_hooks()[:8]
+            if winning_hooks:
+                with st.expander(tr("Winning Hooks Title")):
+                    for index, winner in enumerate(winning_hooks):
+                        hook_cols = st.columns([5, 1], vertical_alignment="center")
+                        hook_cols[0].markdown(
+                            f"**{html.escape(winner['hook'])}**  \n"
+                            + tr("Winning Hook Stats").format(
+                                orders=winner.get("orders", 0),
+                                amount=commission_report_service.format_vnd(
+                                    winner.get("commission", 0)
+                                ),
+                            )
+                        )
+                        hook_cols[1].button(
+                            tr("Use Hook"),
+                            key=f"use_winning_hook_{index}",
+                            on_click=_use_winning_hook,
+                            args=(winner["hook"],),
+                        )
             hook_count = len([l for l in params.hook_text.splitlines() if l.strip()])
             if hook_count > 1:
                 st.caption(
@@ -6461,6 +6720,22 @@ def _render_sales_overlay_settings(panel, params):
                 help=tr("CTA Text Help"),
             ).strip()
             _set_runtime_config("ui", "cta_text", params.cta_text)
+            proof_cols = st.columns(3)
+            with proof_cols[0]:
+                params.sold_text = st.text_input(
+                    tr("Sold Text"), key="sales_sold_text", max_chars=40,
+                    placeholder="Đã bán 10k+",
+                ).strip()
+            with proof_cols[1]:
+                params.rating_text = st.text_input(
+                    tr("Rating Text"), key="sales_rating_text", max_chars=10,
+                    placeholder="4.9",
+                ).strip()
+            with proof_cols[2]:
+                params.urgency_text = st.text_input(
+                    tr("Urgency Text"), key="sales_urgency_text", max_chars=30,
+                    placeholder=tr("Urgency Placeholder"),
+                ).strip()
             if "sales_channel_name" not in st.session_state:
                 st.session_state["sales_channel_name"] = config.ui.get("channel_name", "")
             params.channel_name = st.text_input(
@@ -6478,6 +6753,13 @@ def _render_sales_overlay_settings(panel, params):
                 placeholder="https://s.shopee.vn/...",
                 help=tr("Affiliate Link Help"),
             ).strip()
+            params.sub_id = st.text_input(
+                tr("Sub ID"),
+                key="sales_sub_id",
+                max_chars=50,
+                placeholder="khangiay-v1",
+                help=tr("Sub ID Help"),
+            ).strip()
             params.post_caption_enabled = st.checkbox(
                 tr("Generate Post Caption"),
                 value=bool(config.ui.get("post_caption_enabled", True)),
@@ -6487,6 +6769,46 @@ def _render_sales_overlay_settings(panel, params):
             _set_runtime_config(
                 "ui", "post_caption_enabled", params.post_caption_enabled
             )
+
+
+def _saved_compare_image(slot):
+    """Save one before/after upload once and remember its stored path."""
+    uploaded = st.session_state.get(f"compare_{slot}_uploader")
+    if uploaded is None:
+        st.session_state.pop(f"compare_{slot}_saved", None)
+        return ""
+    saved = st.session_state.get(f"compare_{slot}_saved")
+    if saved and saved.get("file_id") == uploaded.file_id:
+        return saved["path"]
+    try:
+        stored_name = material_upload_service.save_material_upload(
+            uploaded.name, uploaded
+        )
+    except (
+        material_upload_service.MaterialUploadError,
+        material_upload_service.MaterialServiceError,
+    ) as exc:
+        st.error(str(exc))
+        return ""
+    path = os.path.join(material_upload_service.uploaded_material_dir(), stored_name)
+    st.session_state[f"compare_{slot}_saved"] = {"file_id": uploaded.file_id, "path": path}
+    return path
+
+
+def _render_before_after_inputs(params):
+    with st.expander(tr("Before After Title")):
+        st.caption(tr("Before After Help"))
+        compare_cols = st.columns(2)
+        image_types = [ext.lstrip(".") for ext in material_upload_service.SUPPORTED_IMAGE_EXTENSIONS]
+        with compare_cols[0]:
+            st.file_uploader(tr("Before Photo"), type=image_types, key="compare_before_uploader")
+        with compare_cols[1]:
+            st.file_uploader(tr("After Photo"), type=image_types, key="compare_after_uploader")
+        before = _saved_compare_image("before")
+        after = _saved_compare_image("after")
+        if before and after:
+            params.compare_before = before
+            params.compare_after = after
 
 
 def _render_video_settings(panel, params):
@@ -6741,6 +7063,30 @@ def _render_video_settings(panel, params):
                     help=tr("Real Clip First Help"),
                 )
                 _set_runtime_config("ui", "real_clip_first", params.real_clip_first)
+                st.session_state.setdefault(
+                    "smart_trim_checkbox", bool(config.ui.get("smart_trim", True))
+                )
+                params.smart_trim = st.checkbox(
+                    tr("Smart Trim"),
+                    key="smart_trim_checkbox",
+                    help=tr("Smart Trim Help"),
+                )
+                _set_runtime_config("ui", "smart_trim", params.smart_trim)
+                rembg_ready = product_images_service.rembg_available()
+                st.session_state.setdefault(
+                    "remove_background_checkbox",
+                    bool(config.ui.get("remove_background", False)) and rembg_ready,
+                )
+                params.remove_background = st.checkbox(
+                    tr("Remove Background"),
+                    key="remove_background_checkbox",
+                    help=tr("Remove Background Help"),
+                    disabled=not rembg_ready,
+                )
+                if not rembg_ready:
+                    st.caption(tr("Remove Background Not Installed"))
+                _set_runtime_config("ui", "remove_background", params.remove_background)
+                _render_before_after_inputs(params)
 
             # MiniMax H3 的远端时长范围是 4～15 秒。选择秘塔时使用完整能力
             # 范围，既避免 2/3 秒被按 4 秒计费，也让 WebUI 与 CLI、服务层一致。
