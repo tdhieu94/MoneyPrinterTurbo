@@ -123,6 +123,11 @@ class VideoParams(BaseModel):
     video_clip_speed: Optional[float] = 1.0
     match_materials_to_script: bool = False
     video_count: int = Field(default=1, ge=1)
+    # Set when one "N videos" request is split into N tasks so each video
+    # gets its own script and photo order: this task is version
+    # ``variant_index`` of ``variant_total`` (0 = not a split request).
+    variant_index: int = Field(default=0, ge=0, le=20)
+    variant_total: int = Field(default=0, ge=0, le=20)
 
     # Sales overlays for affiliate product videos (empty = not shown).
     hook_text: str = Field(default="", max_length=800)

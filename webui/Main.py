@@ -54,6 +54,7 @@ from app.services import app_backup as app_backup_service
 from app.services import posting_log as posting_log_service
 from app.services import product_images as product_images_service
 from app.services import sales_post as sales_post_service
+from app.services import video_variants as video_variants_service
 from app.services import (
     cache_manager,
     llm,
@@ -7150,6 +7151,18 @@ def _render_video_settings(panel, params):
                 key="video_count_select",
             )
             _set_runtime_config("ui", "video_count", params.video_count)
+            if params.video_count > 1:
+                st.checkbox(
+                    tr("Vary Each Video"),
+                    value=bool(config.ui.get("vary_each_video", True)),
+                    key="vary_each_video",
+                    help=tr("Vary Each Video Help"),
+                )
+                _set_runtime_config(
+                    "ui",
+                    "vary_each_video",
+                    bool(st.session_state.get("vary_each_video", True)),
+                )
             # 少用的性能/编码参数收进“高级视频设置”，主界面只留做商品视频需要的选项。
             with st.container(key="advanced_settings_video"):
                 with st.expander(tr("Advanced Video Settings"), expanded=False):
@@ -10278,6 +10291,15 @@ def _render_generation_controls(
                 f"task_id={task_id}, duration={reusable_voice_preview['duration']:.2f}s"
             )
 
+        # 一次做多条视频时，每条单独排队：各自重写文案、换图片顺序和开头钩子。
+        extra_variants = []
+        if (
+            bool(st.session_state.get("vary_each_video", True))
+            and loomloom_video_request is None
+            and video_variants_service.can_split(params)
+        ):
+            params, *extra_variants = video_variants_service.split_params(params)
+
         try:
             st.toast(tr("Generating Video"))
             logger.info(tr("Start Generating Video"))
@@ -10310,6 +10332,29 @@ def _render_generation_controls(
             _remove_active_generation_task(task_id)
             task_id = submitted_task_id
             _add_active_generation_task(task_id, subject=params.video_subject)
+        for variant_params in extra_variants:
+            variant_task_id = str(uuid4())
+            _add_active_generation_task(variant_task_id, subject=variant_params.video_subject)
+            try:
+                variant_task_id = webui_task.submit_generation(
+                    task_id=variant_task_id,
+                    params=variant_params,
+                    capture_logs=not config.ui.get("hide_log", False),
+                    voxcpm_reference_audio=voxcpm_reference_audio,
+                    voxcpm_prompt_audio=voxcpm_prompt_audio,
+                    voxcpm_prompt_text=voxcpm_prompt_text,
+                )
+            except Exception as exc:
+                _remove_active_generation_task(variant_task_id)
+                logger.error(
+                    f"video variant submission failed: "
+                    f"index={variant_params.variant_index}, {exc}"
+                )
+                st.error(tr("Video Generation Failed"))
+                continue
+            _add_active_generation_task(variant_task_id, subject=variant_params.video_subject)
+        if extra_variants:
+            logger.info(f"video variants submitted: total={len(extra_variants) + 1}")
         st.session_state["current_generation_task_id"] = task_id
         st.query_params["generation_task"] = task_id
         logger.info(f"WebUI generation task submitted: task_id={task_id}")

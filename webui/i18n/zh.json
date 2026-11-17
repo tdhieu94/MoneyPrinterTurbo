@@ -890,6 +890,8 @@
     "Affiliate Template Problem Solution": "痛点 → 解决 → 优惠（短）",
     "Best Posting Hours": "最佳发布时间：11:00–13:00 和 19:00–22:00。",
     "Best Posting Now": "现在是高峰时段，马上发布今天的视频吧。",
-    "Best Posting Soon": "一小时内进入高峰时段，准备好今天的视频。"
+    "Best Posting Soon": "一小时内进入高峰时段，准备好今天的视频。",
+    "Vary Each Video": "每条视频使用不同文案和图片顺序",
+    "Vary Each Video Help": "每条视频都会按不同角度重新撰写文案、调整图片顺序并使用各自的开头钩子。视频会依次生成，每条为单独任务。"
   }
 }
