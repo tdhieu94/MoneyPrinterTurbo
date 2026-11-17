@@ -2115,6 +2115,28 @@ def _render_generation_activity(task):
         st.caption(tr("Generation Remote Task").format(task_id=activity["remote_id"]))
 
 
+def _toggle_posted(task_id, subject):
+    posted = bool(st.session_state.get(f"posted_checkbox_{task_id}"))
+    try:
+        posting_log_service.set_posted(task_id, subject, posted=posted)
+    except OSError as exc:
+        logger.error(f"failed to update posting log: {exc}")
+
+
+def _render_posted_marker(task_id, task):
+    """完成的视频下方显示“已发布”勾选框，用于统计 30 天内的发布节奏。"""
+    widget_key = f"posted_checkbox_{task_id}"
+    if widget_key not in st.session_state:
+        st.session_state[widget_key] = posting_log_service.is_posted(task_id)
+    st.checkbox(
+        tr("Mark As Posted"),
+        key=widget_key,
+        help=tr("Mark As Posted Help"),
+        on_change=_toggle_posted,
+        args=(task_id, str(task.get("video_subject") or "")),
+    )
+
+
 def _render_generation_task_snapshot(task_id, task):
     """根据状态存储中的快照渲染进度、失败原因或最终成片。"""
     if not task:
@@ -6152,28 +6174,6 @@ def _render_shopee_preset_button():
         )
         if st.session_state.pop("shopee_preset_applied", False):
             st.success(tr("Shopee Preset Applied"))
-
-
-def _toggle_posted(task_id, subject):
-    posted = bool(st.session_state.get(f"posted_checkbox_{task_id}"))
-    try:
-        posting_log_service.set_posted(task_id, subject, posted=posted)
-    except OSError as exc:
-        logger.error(f"failed to update posting log: {exc}")
-
-
-def _render_posted_marker(task_id, task):
-    """完成的视频下方显示“已发布”勾选框，用于统计 30 天内的发布节奏。"""
-    widget_key = f"posted_checkbox_{task_id}"
-    if widget_key not in st.session_state:
-        st.session_state[widget_key] = posting_log_service.is_posted(task_id)
-    st.checkbox(
-        tr("Mark As Posted"),
-        key=widget_key,
-        help=tr("Mark As Posted Help"),
-        on_change=_toggle_posted,
-        args=(task_id, str(task.get("video_subject") or "")),
-    )
 
 
 def _render_posting_pace():
