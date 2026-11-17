@@ -6507,13 +6507,14 @@ def _render_video_settings(panel, params):
                 image_motion_labels = {
                     ImageMotion.static.value: tr("Static Image"),
                     ImageMotion.zoom.value: tr("Slow Zoom"),
+                    ImageMotion.gentle.value: tr("Gentle Zoom No Crop"),
                 }
                 params.image_motion = ImageMotion(
                     stable_selectbox(
                         tr("Image Motion"),
                         options=list(image_motion_labels),
                         default_value=_saved_ui_choice(
-                            "image_motion", list(image_motion_labels), ImageMotion.zoom.value,
+                            "image_motion", list(image_motion_labels), ImageMotion.gentle.value,
                             # 生成任务持锁时，切换语言或素材来源会重建控件；
                             # 此时必须恢复尚未落盘的最新选择，不能写回旧配置值。
                             section=config.snapshot_config_with_pending(config.ui),

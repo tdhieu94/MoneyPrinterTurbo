@@ -57,6 +57,8 @@ class VideoFitMode(str, Enum):
 class ImageMotion(str, Enum):
     static = "static"
     zoom = "zoom"
+    # Grows from slightly smaller to the full photo, so no edge is cut off.
+    gentle = "gentle"
 
 
 SubtitleDisplayMode = Literal["sentence", "word_by_word"]

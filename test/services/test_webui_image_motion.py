@@ -33,8 +33,8 @@ def test_motion_widget_persists_and_restores_old_and_new_tasks(tmp_path):
         assert not app.exception
         widget = _select(app, "image_motion_select")
         assert widget.label == "图片动态效果"
-        assert widget.value == "zoom"
-        assert widget.options == ["静止", "缓慢放大"]
+        assert widget.value == "gentle"
+        assert widget.options == ["静止", "缓慢放大", "轻微放大，不裁切图片（适合商品图）"]
         widget.select("static").run()
         assert not app.exception
         assert config.ui["image_motion"] == "static"
@@ -94,7 +94,7 @@ def test_motion_selection_survives_rebuild_while_generation_holds_config(tmp_pat
             _select(app, "image_motion_select").select("static").run()
             assert not app.exception
             assert _select(app, "image_motion_select").value == "static"
-            assert config.ui["image_motion"] == "zoom"
+            assert config.ui["image_motion"] == "gentle"
             assert config.snapshot_config_with_pending(config.ui)["image_motion"] == "static"
             if rebuild == "language":
                 _select(app, "top_language_code_selector").select("en").run()

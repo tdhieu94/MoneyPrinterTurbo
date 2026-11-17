@@ -811,6 +811,7 @@
     "Generate Product Batch": "为 {count} 个商品生成视频",
     "Product Batch Submitted": "已排队 {count} 个商品视频，将依次生成，可在任务管理中查看进度。",
     "Product Batch Needs TTS": "批量制作需要使用 AI 配音，请不要选择上传音频文件。",
-    "Product Batch Row Error": "第 {line} 行：{error}"
+    "Product Batch Row Error": "第 {line} 行：{error}",
+    "Gentle Zoom No Crop": "轻微放大，不裁切图片（适合商品图）"
   }
 }

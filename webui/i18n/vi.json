@@ -553,6 +553,7 @@
     "Generate Product Batch": "Làm video cho {count} sản phẩm",
     "Product Batch Submitted": "Đã xếp hàng {count} video sản phẩm. App làm lần lượt từng video; xem tiến độ ở Quản lý tác vụ.",
     "Product Batch Needs TTS": "Làm hàng loạt cần dùng giọng AI. Hãy đổi phần lồng tiếng sang giọng đọc thay vì tải file âm thanh.",
-    "Product Batch Row Error": "Dòng {line}: {error}"
+    "Product Batch Row Error": "Dòng {line}: {error}",
+    "Gentle Zoom No Crop": "Phóng nhẹ, không cắt ảnh (hợp ảnh sản phẩm)"
   }
 }

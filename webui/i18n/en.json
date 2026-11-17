@@ -815,6 +815,7 @@
     "Generate Product Batch": "Make videos for {count} products",
     "Product Batch Submitted": "Queued {count} product videos. They are made one at a time; follow them in the task manager.",
     "Product Batch Needs TTS": "Batch videos need an AI voice. Switch the voiceover away from an uploaded audio file.",
-    "Product Batch Row Error": "Row {line}: {error}"
+    "Product Batch Row Error": "Row {line}: {error}",
+    "Gentle Zoom No Crop": "Gentle zoom, never crops (best for product photos)"
   }
 }
